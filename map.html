@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,9 +15,15 @@
             box-sizing: border-box;
         }
 
+        :root {
+            --tesla-red: #E81E25;
+            --tesla-grey: #393c41;
+            --primary-gradient: linear-gradient(135deg, #E81E25 0%, #a3151a 100%);
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background: #f4f4f4;
             min-height: 100vh;
             overflow: hidden;
         }
@@ -31,21 +37,28 @@
         }
 
         .header {
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(10px);
-            padding: 16px 20px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 12px 24px;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            z-index: 1001;
         }
 
         .header h1 {
-            color: #2c3e50;
-            font-size: 20px;
-            font-weight: 700;
+            color: var(--tesla-grey);
+            font-size: 22px;
+            font-weight: 600;
             margin-bottom: 12px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+        }
+
+        .tesla-logo {
+            width: 28px;
+            height: 28px;
+            color: var(--tesla-red);
         }
 
         .controls {
@@ -53,138 +66,105 @@
             flex-wrap: wrap;
             gap: 16px;
             align-items: center;
-            justify-content: space-between;
             position: relative;
         }
 
         .control-group {
             display: flex;
             flex-direction: column;
-            gap: 4px;
-            min-width: 180px;
-        }
-
-        .custom-input-group {
-            min-width: 120px;
+            gap: 6px;
+            min-width: 160px;
         }
 
         .control-group label {
-            font-weight: 600;
-            color: #34495e;
-            font-size: 12px;
+            font-weight: 700;
+            color: #5c5e62;
+            font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
         }
 
         .datetime-input {
-            padding: 10px 12px;
-            border: 2px solid #e1e8ed;
-            border-radius: 8px;
-            font-size: 14px;
-            background: white;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            height: 40px;
+            padding: 8px 12px;
+            border: 1px solid #d0d1d2;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #f4f4f4;
+            transition: all 0.2s ease;
+            height: 38px;
+            color: var(--tesla-grey);
         }
 
         .datetime-input:focus {
             outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-            transform: translateY(-1px);
+            border-color: var(--tesla-red);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(232, 30, 37, 0.1);
         }
 
         .speed-options {
             display: flex;
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 2px;
-            gap: 1px;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
-            height: 40px;
+            background: #f4f4f4;
+            border-radius: 6px;
+            padding: 3px;
+            gap: 4px;
+            height: 38px;
+            border: 1px solid #d0d1d2;
         }
 
         .speed-btn {
             flex: 1;
-            padding: 6px 4px;
+            padding: 0 8px;
             text-align: center;
             font-size: 11px;
             font-weight: 600;
-            border-radius: 6px;
+            border-radius: 4px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            color: #6c757d;
+            transition: all 0.2s ease;
+            color: #5c5e62;
             border: none;
             background: transparent;
-            position: relative;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            line-height: 1;
         }
 
         .speed-btn:hover {
-            color: #495057;
-            background: rgba(52, 152, 219, 0.1);
+            background: rgba(0, 0, 0, 0.05);
         }
 
         .speed-btn.active {
-            background: linear-gradient(135deg, #3498db, #2980b9);
-            color: white;
-            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
-            transform: translateY(-1px);
-        }
-
-        .speed-btn.recommended::after {
-            content: "★";
-            position: absolute;
-            top: -1px;
-            right: -1px;
-            color: #f39c12;
-            font-size: 9px;
+            background: white;
+            color: var(--tesla-red);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
         }
 
         .btn {
-            background: linear-gradient(135deg, #3498db, #2980b9);
+            background: var(--tesla-red);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 0 24px;
+            border-radius: 6px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+            transition: all 0.2s ease;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
             display: flex;
             align-items: center;
-            gap: 8px;
-            height: 40px;
+            gap: 10px;
+            height: 38px;
+            align-self: flex-end;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+            background: #a3151a;
+            box-shadow: 0 4px 12px rgba(232, 30, 37, 0.2);
         }
 
         .btn:active {
-            transform: translateY(0);
-        }
-
-        .btn.loading {
-            background: #95a5a6;
-            cursor: not-allowed;
-        }
-
-        .btn.loading i {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            transform: translateY(1px);
         }
 
         #map {
@@ -192,28 +172,27 @@
             min-height: 0;
             width: 100%;
             height: 100%;
-            border-radius: 0;
-            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1);
         }
 
         .info-panel {
             position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.95);
+            top: 24px;
+            right: 24px;
+            background: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(10px);
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             z-index: 1000;
-            min-width: 200px;
+            min-width: 220px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .info-item {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 13px;
+            margin-bottom: 10px;
+            font-size: 12px;
         }
 
         .info-item:last-child {
@@ -221,13 +200,13 @@
         }
 
         .info-label {
-            color: #7f8c8d;
+            color: #5c5e62;
             font-weight: 500;
         }
 
         .info-value {
-            color: #2c3e50;
-            font-weight: 600;
+            color: var(--tesla-grey);
+            font-weight: 700;
         }
 
         .status-indicator {
@@ -235,162 +214,82 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            margin-right: 5px;
+            margin-right: 6px;
         }
 
-        .status-connected {
-            background-color: #2ecc71;
-            animation: pulse 2s ease-in-out infinite alternate;
-        }
-
-        .status-loading {
-            background-color: #f39c12;
-            animation: pulse 1s ease-in-out infinite alternate;
-        }
-
-        .status-error {
-            background-color: #e74c3c;
-        }
-
-        @keyframes pulse {
-            from { opacity: 1; }
-            to { opacity: 0.3; }
-        }
+        .status-connected { background-color: #2ecc71; }
+        .status-loading { background-color: #f39c12; }
+        .status-error { background-color: #e74c3c; }
 
         .smart-recommendation-toast {
             position: fixed;
-            top: 80px;
-            right: 20px;
-            background: rgba(52, 152, 219, 0.95);
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--tesla-grey);
             color: white;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 500;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-size: 14px;
             z-index: 10001;
             opacity: 0;
-            transform: translateX(100%);
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-            max-width: 280px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.5s cubic-bezier(0.19, 1, 0.22, 1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            max-width: 90%;
         }
 
         .smart-recommendation-toast.show {
             opacity: 1;
-            transform: translateX(0);
-        }
-
-        .recommendation-content {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-
-        .recommendation-icon {
-            font-size: 16px;
-            color: #f1c40f;
-        }
-
-        .recommendation-message {
-            flex: 1;
-            line-height: 1.3;
-        }
-
-        .recommendation-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
+            transform: translateX(-50%) translateY(0);
         }
 
         .recommendation-action-btn {
-            padding: 4px 10px;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
+            background: white;
+            color: var(--tesla-grey);
+            border: none;
+            padding: 6px 16px;
             border-radius: 4px;
-            font-size: 11px;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(5px);
-        }
-
-        .recommendation-action-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
         }
 
         .recommendation-action-btn.dismiss {
-            background: rgba(0, 0, 0, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        .recommendation-action-btn.dismiss:hover {
-            background: rgba(0, 0, 0, 0.2);
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                padding: 15px;
-            }
-
-            .controls {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .control-group {
-                min-width: 100%;
-            }
-
-            .info-panel {
-                position: relative;
-                top: auto;
-                right: auto;
-                margin: 10px;
-                margin-bottom: 0;
-            }
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         .toast {
             position: fixed;
-            top: 20px;
+            top: 24px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(46, 204, 113, 0.95);
+            background: var(--tesla-grey);
             color: white;
             padding: 12px 24px;
-            border-radius: 8px;
+            border-radius: 6px;
             font-weight: 500;
             z-index: 10000;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
 
-        .toast.error {
-            background: rgba(231, 76, 60, 0.95);
+        .toast.error { background: var(--tesla-red); }
+        .toast.show { opacity: 1; }
+
+        .car-marker-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .toast.show {
-            opacity: 1;
-        }
-
-        .car-marker {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: scale(0.8); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .tesla-car-icon {
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
         }
     </style>
 </head>
@@ -398,45 +297,34 @@
     <div class="container">
         <div class="header">
             <h1>
-                <i class="fas fa-car"></i>
-                TeslaMate Drive Map 2.0
+                <svg class="tesla-logo" viewBox="0 0 342 352.22" xmlns="http://www.w3.org/2000/svg"><path d="M0 35.22h342c-23.36 41.22-68.51 68.61-119.82 73.57L222.18 108.79l32.12 31.78c-4.43.34-8.86.67-13.3 1.01l-10.42-10.3c-3.15.34-6.31.67-9.46 1.01l10.42 10.3c-1.14.11-2.28.22-3.42.34l-10.42-10.3c-1.29.11-2.58.22-3.87.34l10.42 10.3c-.57.06-1.14.11-1.71.17l-10.42-10.3c-2.15.17-4.29.34-6.44.51l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.43.03-.86.07-1.28.1l-10.42-10.3c-.29.02-.57.05-.86.07l10.42 10.3c-.86.07-1.71.13-2.57.2l-10.42-10.3c-.57.05-1.14.09-1.71.14l10.42 10.3c-2 .16-4 .32-6 .48l10.42 10.3c-.43.03-.86.07-1.28.1l-10.42-10.3c-3.29.26-6.58.53-9.87.79l10.42 10.3c-1 .08-2 .16-3 .24l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14" fill="currentColor"/></svg>
+                TeslaMate Trail Map
             </h1>
             <div class="controls">
                 <div class="control-group">
-                    <label for="startTime">开始时间</label>
+                    <label for="startTime">Start Time</label>
                     <input type="datetime-local" id="startTime" class="datetime-input">
                 </div>
                 <div class="control-group">
-                    <label for="endTime">结束时间</label>
+                    <label for="endTime">End Time</label>
                     <input type="datetime-local" id="endTime" class="datetime-input">
                 </div>
                 <div class="control-group">
-                    <label>动画速度</label>
+                    <label>Animation Speed</label>
                     <div class="speed-options">
-                        <button class="speed-btn" data-speed="0.5" data-label="慢">
-                            慢<br>0.5x
-                        </button>
-                        <button class="speed-btn active" data-speed="1" data-label="中">
-                            中<br>1x
-                        </button>
-                        <button class="speed-btn" data-speed="3" data-label="快">
-                            快<br>3x
-                        </button>
-                        <button class="speed-btn" data-speed="custom" data-label="自定义">
-                            自定义
-                        </button>
+                        <button class="speed-btn" data-speed="0.5">0.5x</button>
+                        <button class="speed-btn active" data-speed="1">1x</button>
+                        <button class="speed-btn" data-speed="3">3x</button>
+                        <button class="speed-btn" data-speed="custom">Custom</button>
                     </div>
                 </div>
-                <div class="control-group custom-input-group" id="customInputGroup" style="display: none;">
-                    <label>自定义速度</label>
-                    <div style="display: flex; align-items: center; gap: 4px; height: 40px;">
-                        <input type="number" class="datetime-input" id="customInput" min="0.1" max="10" step="0.1" value="2" style="width: 80px; text-align: center;">
-                        <span style="font-size: 14px; color: #6c757d;">x</span>
-                    </div>
+                <div class="control-group" id="customInputGroup" style="display: none;">
+                    <label>Custom Speed</label>
+                    <input type="number" class="datetime-input" id="customInput" min="0.1" max="10" step="0.1" value="2" style="width: 80px;">
                 </div>
                 <button class="btn" id="showDrivesBtn" onclick="fetchAndDrawData()">
                     <i class="fas fa-play"></i>
-                    显示行程
+                    Show Trail
                 </button>
             </div>
         </div>
@@ -445,18 +333,18 @@
             <div id="map"></div>
             <div class="info-panel">
                 <div class="info-item">
-                    <span class="info-label">状态:</span>
+                    <span class="info-label">Status:</span>
                     <span class="info-value">
                         <span class="status-indicator status-connected" id="statusIndicator"></span>
-                        <span id="statusText">就绪</span>
+                        <span id="statusText">Ready</span>
                     </span>
                 </div>
                 <div class="info-item">
-                    <span class="info-label">行程数:</span>
+                    <span class="info-label">Drives:</span>
                     <span class="info-value" id="driveCount">0</span>
                 </div>
                 <div class="info-item">
-                    <span class="info-label">位置点数:</span>
+                    <span class="info-label">Data Points:</span>
                     <span class="info-value" id="positionCount">0</span>
                 </div>
             </div>
@@ -466,34 +354,31 @@
     <div class="toast" id="toast"></div>
     
     <div class="smart-recommendation-toast" id="smartRecommendationToast">
-        <div class="recommendation-content">
-            <i class="fas fa-lightbulb recommendation-icon"></i>
-            <div class="recommendation-message" id="recommendationMessage">
-                建议使用快速模式浏览长途行程
-            </div>
+        <div id="recommendationMessage">
+            Long trip detected. Switch to 3x speed?
         </div>
-        <div class="recommendation-actions">
-            <button class="recommendation-action-btn" onclick="applyRecommendation()">应用</button>
-            <button class="recommendation-action-btn dismiss" onclick="dismissRecommendation()">忽略</button>
+        <div style="display: flex; gap: 10px;">
+            <button class="recommendation-action-btn" onclick="applyRecommendation()">Apply</button>
+            <button class="recommendation-action-btn dismiss" onclick="dismissRecommendation()">Ignore</button>
         </div>
     </div>
 
     <script>
-        // 初始化地图
+        // Initialize map
         var map = L.map('map').setView([39.9042, 116.4074], 10);
 
-        // 添加瓦片图层
+        // Add tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
 
-        // 全局变量
+        // Global variables
         let currentPolyline = null;
         let currentAnimation = null;
         let isLoading = false;
 
-        // DOM 元素
+        // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
         const smartRecommendationToast = document.getElementById('smartRecommendationToast');
         const recommendationMessage = document.getElementById('recommendationMessage');
@@ -505,13 +390,13 @@
         const showDrivesBtn = document.getElementById('showDrivesBtn');
         const toast = document.getElementById('toast');
 
-        // 当前速度设置
+        // Current speed settings
         let currentSpeed = 1;
         let recommendedSpeed = 1;
         let userHasChangedSpeed = false;
         let currentRecommendation = null;
 
-        // 速度按钮事件处理
+        // Speed button event handlers
         speedButtons.forEach(btn => {
             btn.addEventListener('click', function() {
                 const speed = this.dataset.speed;
@@ -526,30 +411,30 @@
                     customGroup.style.display = 'flex';
                     customGroup.style.flexDirection = 'column';
                     currentSpeed = parseFloat(customInput.value) || 2;
-                    console.log('显示自定义输入组，当前速度:', currentSpeed + 'x');
+                    console.log('Showing custom input group, current speed:', currentSpeed + 'x');
                 } else {
                     customGroup.style.display = 'none';
                     currentSpeed = parseFloat(speed);
-                    console.log('隐藏自定义输入组，速度:', currentSpeed + 'x');
+                    console.log('Hiding custom input group, speed:', currentSpeed + 'x');
                 }
                 
-                console.log('用户手动设置速度为:', currentSpeed + 'x');
+                console.log('User manually set speed to:', currentSpeed + 'x');
             });
         });
 
-        // 自定义速度输入处理
+        // Custom speed input handling
         customInput.addEventListener('input', function() {
             if (document.querySelector('.speed-btn[data-speed="custom"]').classList.contains('active')) {
                 currentSpeed = parseFloat(this.value) || 2;
                 userHasChangedSpeed = true;
-                console.log('用户自定义速度:', currentSpeed + 'x');
+                console.log('User custom speed:', currentSpeed + 'x');
             }
         });
 
-        // 智能速度推荐算法
+        // Smart speed recommendation algorithm
         function getSmartSpeed(tripData) {
             if (!tripData || !tripData.length) {
-                return { speed: 1, reason: "默认正常速度", confidence: "medium" };
+                return { speed: 1, reason: "Default normal speed", confidence: "medium" };
             }
 
             let totalDurationHours = 0;
@@ -576,18 +461,18 @@
             const totalTimeSpanHours = earliestTime && latestTime ? 
                 (latestTime - earliestTime) / (1000 * 60 * 60) : totalDurationHours;
 
-            console.log(`智能分析: ${tripData.length}个行程, ${totalPositions}个位置点, 行驶时间${totalDurationHours.toFixed(1)}h, 时间跨度${totalTimeSpanHours.toFixed(1)}h`);
+            console.log(`Smart analysis: ${tripData.length} trips, ${totalPositions} positions, drive time ${totalDurationHours.toFixed(1)}h, time span ${totalTimeSpanHours.toFixed(1)}h`);
 
             if (totalDurationHours >= 3) {
                 return { 
                     speed: 3, 
-                    reason: `行驶时间${totalDurationHours.toFixed(1)}小时，建议快速浏览`,
+                    reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest fast browsing`,
                     confidence: "high" 
                 };
             } else if (totalDurationHours >= 1) {
                 return { 
                     speed: 1, 
-                    reason: `行驶时间${totalDurationHours.toFixed(1)}小时，建议正常播放`,
+                    reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest normal playback`,
                     confidence: "high" 
                 };
             } else if (totalDurationHours > 0) {
@@ -595,22 +480,22 @@
                 if (pointsPerMinute > 10) {
                     return { 
                         speed: 0.5, 
-                        reason: `短途精细轨迹(${totalDurationHours.toFixed(1)}h)，建议慢速观察`,
+                        reason: `Short precise track (${totalDurationHours.toFixed(1)}h), suggest slow observation`,
                         confidence: "medium" 
                     };
                 } else {
                     return { 
                         speed: 1, 
-                        reason: `短途行程(${totalDurationHours.toFixed(1)}h)，建议正常播放`,
+                        reason: `Short trip (${totalDurationHours.toFixed(1)}h), suggest normal playback`,
                         confidence: "medium" 
                     };
                 }
             }
 
-            return { speed: 1, reason: "默认正常播放速度", confidence: "low" };
+            return { speed: 1, reason: "Default normal playback speed", confidence: "low" };
         }
 
-        // 应用智能推荐
+        // Apply smart recommendation
         function applySmartSpeed(recommendation) {
             currentRecommendation = recommendation;
             recommendedSpeed = recommendation.speed;
@@ -629,11 +514,11 @@
             
             if (shouldShowRecommendation) {
                 showRecommendationToast(recommendation);
-                console.log('显示智能推荐提示:', recommendation.speed + 'x');
+                console.log('Showing smart recommendation toast:', recommendation.speed + 'x');
             } else {
-                console.log('智能推荐已分析，静默标记推荐选项:', recommendation.speed + 'x');
+                console.log('Smart recommendation analyzed, silently marking recommendation option:', recommendation.speed + 'x');
                 if (userHasChangedSpeed) {
-                    console.log('用户已自定义速度，不显示推荐提示');
+                    console.log('User has custom speed, not showing recommendation toast');
                 }
             }
         }
@@ -652,15 +537,15 @@
         function applyRecommendation() {
             if (currentRecommendation) {
                 selectSpeed(currentRecommendation.speed);
-                showToast(`已应用推荐速度: ${currentRecommendation.speed}x`);
+                showToast(`Applied recommended speed: ${currentRecommendation.speed}x`);
                 dismissRecommendation();
-                console.log('用户应用了推荐速度:', currentRecommendation.speed + 'x');
+                console.log('User applied recommended speed:', currentRecommendation.speed + 'x');
             }
         }
 
         function dismissRecommendation() {
             smartRecommendationToast.classList.remove('show');
-            console.log('推荐提示已关闭');
+            console.log('Recommendation toast closed');
         }
 
         function selectSpeed(speed) {
@@ -681,7 +566,7 @@
                 customGroup.style.display = 'none';
             }
             
-            console.log('selectSpeed 函数调用，速度:', speed, '自定义模式:', isCustomSelected);
+            console.log('selectSpeed function called, speed:', speed, 'custom mode:', isCustomSelected);
         }
 
         function getCurrentSpeed() {
@@ -706,12 +591,12 @@
             const btn = showDrivesBtn;
             if (loading) {
                 btn.className = 'btn loading';
-                btn.innerHTML = '<i class="fas fa-spinner"></i> 加载中...';
-                setStatus('loading', '加载中');
+                btn.innerHTML = '<i class="fas fa-spinner"></i> Loading...';
+                setStatus('loading', 'Loading');
             } else {
                 btn.className = 'btn';
-                btn.innerHTML = '<i class="fas fa-play"></i> 显示行程';
-                setStatus('connected', '就绪');
+                btn.innerHTML = '<i class="fas fa-play"></i> Show Trail';
+                setStatus('connected', 'Ready');
             }
         }
 
@@ -724,15 +609,24 @@
             }
 
             if (latlngs.length === 0) {
-                showToast('没有找到轨迹数据', true);
+                showToast('No trail data found', true);
                 return;
             }
 
             try {
+                // High-quality Tesla Car SVG (top view)
+                const carSvg = `
+                    <svg class="tesla-car-icon" width="24" height="48" viewBox="0 0 50 100" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10,10 Q25,0 40,10 L45,30 Q50,60 45,90 L5,90 Q0,60 5,30 Z" fill="#E81E25" stroke="#fff" stroke-width="2"/>
+                        <rect x="12" y="15" width="26" height="20" rx="4" fill="rgba(0,0,0,0.7)"/>
+                        <rect x="12" y="55" width="26" height="25" rx="2" fill="rgba(0,0,0,0.7)"/>
+                    </svg>
+                `;
+
                 currentAnimation = L.motion.polyline(latlngs, {
-                    color: "#3498db",
-                    weight: 4,
-                    opacity: 0.8
+                    color: "#E81E25",
+                    weight: 5,
+                    opacity: 0.6
                 }, {
                     auto: true,
                     duration: duration
@@ -740,21 +634,21 @@
                     removeOnEnd: false,
                     showMarker: true,
                     icon: L.divIcon({
-                        html: '<i class="fas fa-car" style="color: #e74c3c; font-size: 20px;"></i>',
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10],
+                        html: `<div class="car-marker-container">${carSvg}</div>`,
+                        iconSize: [24, 48],
+                        iconAnchor: [12, 24],
                         className: 'car-marker'
                     })    
                 }).addTo(map);
 
                 currentAnimation.on('end', function() {
-                    showToast('动画播放完成');
-                    setStatus('connected', '完成');
+                    showToast('Trail animation completed');
+                    setStatus('connected', 'Done');
                 });
 
             } catch (error) {
-                console.error('创建动画失败:', error);
-                showToast('创建动画失败', true);
+                console.error('Animation failed:', error);
+                showToast('Failed to start animation', true);
             }
         }
 
@@ -764,10 +658,10 @@
             const startTimeStr = document.getElementById('startTime').value;
             const endTimeStr = document.getElementById('endTime').value;
             
-            console.log('开始时间:', startTimeStr, '结束时间:', endTimeStr);
+            console.log('Start time:', startTimeStr, 'End time:', endTimeStr);
             
             if (!isValidDateTime(startTimeStr) || !isValidDateTime(endTimeStr)) {
-                showToast('请选择有效的日期时间', true);
+                showToast('Please select valid date and time', true);
                 return;
             }
 
@@ -778,7 +672,7 @@
                 const endTime = new Date(endTimeStr);
                 
                 if (startTime >= endTime) {
-                    showToast('开始时间必须早于结束时间', true);
+                    showToast('Start time must be earlier than end time', true);
                     setLoading(false);
                     return;
                 }
@@ -786,47 +680,47 @@
                 const startTimeUTC = startTime.toISOString().slice(0,19);
                 const endTimeUTC = endTime.toISOString().slice(0,19);
 
-                console.log('请求URL:', `/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
+                console.log('Request URL:', `/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
 
                 const response = await fetch(`/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
                 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('响应错误:', response.status, errorText);
+                    console.log('Response error:', response.status, errorText);
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const result = await response.json();
-                console.log("获取到的完整响应:", result);
+                console.log("Full response received:", result);
 
                 const data = result.data || result;
                 
                 if (!Array.isArray(data)) {
-                    console.error('数据格式错误:', typeof data, data);
-                    showToast('服务器返回的数据格式不正确', true);
+                    console.log('Data format error:', typeof data, data);
+                    showToast('Invalid data format returned by server', true);
                     setLoading(false);
                     return;
                 }
                 
                 if (data.length === 0) {
-                    showToast('没有找到指定时间范围内的行程数据', true);
+                    showToast('No trip data found for the specified time range', true);
                     driveCountElement.textContent = '0';
                     positionCountElement.textContent = '0';
                     setLoading(false);
                     return;
                 }
 
-                console.log('行程数据:', data.length, '个行程');
+                console.log('Trip data:', data.length, 'trips');
 
                 const allPositions = data.flatMap(drive => {
-                    console.log('行程', drive.drive_id, '有', (drive.positions || []).length, '个位置点');
+                    console.log('Trip', drive.drive_id, 'has', (drive.positions || []).length, 'positions');
                     return drive.positions || [];
                 }).sort((a, b) => new Date(a.date) - new Date(b.date));
                 
-                console.log('总位置点数:', allPositions.length);
+                console.log('Total positions:', allPositions.length);
                 
                 if (allPositions.length === 0) {
-                    showToast('行程数据中没有位置信息', true);
+                    showToast('No position information in trip data', true);
                     driveCountElement.textContent = data.length.toString();
                     positionCountElement.textContent = '0';
                     setLoading(false);
@@ -835,16 +729,16 @@
 
                 const latlngs = allPositions.map(pos => {
                     if (typeof pos.latitude !== 'number' || typeof pos.longitude !== 'number') {
-                        console.warn('无效的位置数据:', pos);
+                        console.warn('Invalid position data:', pos);
                         return null;
                     }
                     return [pos.latitude, pos.longitude];
                 }).filter(pos => pos !== null);
 
-                console.log('有效位置点数:', latlngs.length);
+                console.log('Valid positions:', latlngs.length);
 
                 if (latlngs.length === 0) {
-                    showToast('没有有效的位置数据', true);
+                    showToast('No valid position data', true);
                     setLoading(false);
                     return;
                 }
@@ -862,11 +756,11 @@
                 const finalDuration = 8000 / finalSpeed;
 
                 moveCarMarkerAndPath(latlngs, finalDuration);
-                showToast(`开始播放 ${data.length} 个行程的轨迹 (${finalSpeed}x速度)`);
+                showToast(`Started playing track for ${data.length} trips (${finalSpeed}x speed)`);
 
             } catch (error) {
-                console.error("获取数据失败:", error);
-                showToast('获取数据失败: ' + error.message, true);
+                console.log("Failed to fetch data:", error);
+                showToast('Failed to fetch data: ' + error.message, true);
             } finally {
                 setLoading(false);
             }
@@ -904,20 +798,20 @@
                 const health = await response.json();
                 
                 if (health.status === 'healthy') {
-                    setStatus('connected', '数据库已连接');
+                    setStatus('connected', 'Database connected');
                 } else {
-                    setStatus('error', '数据库连接失败');
-                    showToast('数据库连接失败，请检查配置', true);
+                    setStatus('error', 'Database connection failed');
+                    showToast('Database connection failed, please check configuration', true);
                 }
             } catch (error) {
-                setStatus('error', '服务不可用');
-                showToast('无法连接到服务器', true);
+                setStatus('error', 'Service unavailable');
+                showToast('Unable to connect to server', true);
             }
         }
 
         window.addEventListener('load', function() {
             setDefaultValues();
-            setStatus('connected', '就绪');
+            setStatus('connected', 'Ready');
             checkHealth();
             
             setTimeout(() => {
@@ -925,8 +819,8 @@
             }, 100);
 
             const customGroup = document.getElementById('customInputGroup');
-            console.log('自定义输入组元素:', customGroup);
-            console.log('自定义输入组是否存在:', customGroup !== null);
+            console.log('Custom input group element:', customGroup);
+            console.log('Custom input group exists:', customGroup !== null);
         });
 
         document.addEventListener('keydown', function(e) {

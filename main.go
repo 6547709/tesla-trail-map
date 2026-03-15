@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -13,11 +14,8 @@ import (
 )
 
 var (
-	host     = os.Getenv("DATABASE_HOST")
-	port, _  = strconv.Atoi(os.Getenv("DATABASE_PORT"))
-	user     = os.Getenv("DATABASE_USER")
-	password = os.Getenv("DATABASE_PASS")
-	dbname   = os.Getenv("DATABASE_NAME")
+	dbPool *pgxpool.Pool
+	logger *slog.Logger
 )
 
 type Position struct {
@@ -31,47 +29,73 @@ type DriveWithPositions struct {
 	Positions []Position `json:"positions"`
 }
 
-var dbPool *pgxpool.Pool
-
 func init() {
+	// Initialize logger
+	logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
+}
+
+func getDBConfig() string {
+	host := os.Getenv("DATABASE_HOST")
 	if host == "" {
 		host = "192.168.10.200"
 	}
-	if port == 0 {
+
+	portStr := os.Getenv("DATABASE_PORT")
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port == 0 {
 		port = 54320
 	}
+
+	user := os.Getenv("DATABASE_USER")
 	if user == "" {
 		user = "teslamate"
 	}
+
+	password := os.Getenv("DATABASE_PASS")
 	if password == "" {
 		password = "secret"
 	}
+
+	dbname := os.Getenv("DATABASE_NAME")
 	if dbname == "" {
 		dbname = "teslamate"
 	}
+
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
 }
 
 func initDB() error {
-	connString := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
+	connString := getDBConfig()
 
-	var err error
-	dbPool, err = pgxpool.New(context.Background(), connString)
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return fmt.Errorf("failed to parse connection string: %w", err)
+	}
+
+	// Optimize pool settings
+	config.MaxConns = 10
+	config.MinConns = 2
+	config.MaxConnLifetime = time.Hour
+	config.MaxConnIdleTime = 30 * time.Minute
+
+	dbPool, err = pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		return fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	// 测试连接
-	if err := dbPool.Ping(context.Background()); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := dbPool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	return nil
 }
 
-func getTripsWithPositions(startDate, endDate string) ([]DriveWithPositions, error) {
-	// 调试输出
-	fmt.Printf("执行查询 - 开始时间: %s, 结束时间: %s\n", startDate, endDate)
+func getTripsWithPositions(ctx context.Context, startDate, endDate string) ([]DriveWithPositions, error) {
+	logger.Info("fetching trips", "start_date", startDate, "end_date", endDate)
 
 	query := `
 	SELECT d.id as drive_id, p.latitude, p.longitude, p.date
@@ -81,24 +105,7 @@ func getTripsWithPositions(startDate, endDate string) ([]DriveWithPositions, err
 	ORDER BY d.start_date ASC, p.date ASC;
 	`
 
-	// 先测试是否有数据
-	countQuery := `
-	SELECT COUNT(*) as drive_count, 
-	       (SELECT COUNT(*) FROM positions p JOIN drives d ON d.id = p.drive_id 
-	        WHERE d.start_date >= $1 AND d.end_date <= $2) as position_count
-	FROM drives d
-	WHERE d.start_date >= $1 AND d.end_date <= $2;
-	`
-
-	var driveCount, positionCount int
-	err := dbPool.QueryRow(context.Background(), countQuery, startDate, endDate).Scan(&driveCount, &positionCount)
-	if err != nil {
-		fmt.Printf("统计查询失败: %v\n", err)
-	} else {
-		fmt.Printf("数据库中符合条件的行程数: %d, 位置点数: %d\n", driveCount, positionCount)
-	}
-
-	rows, err := dbPool.Query(context.Background(), query, startDate, endDate)
+	rows, err := dbPool.Query(ctx, query, startDate, endDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -112,16 +119,14 @@ func getTripsWithPositions(startDate, endDate string) ([]DriveWithPositions, err
 		var latitude, longitude float64
 		var timestamp time.Time
 
-		// 先扫描到正确的类型
 		if err := rows.Scan(&driveID, &latitude, &longitude, &timestamp); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		// 创建Position结构体，将时间转换为字符串
 		pos := Position{
 			Latitude:  latitude,
 			Longitude: longitude,
-			Date:      timestamp.Format(time.RFC3339), // 转换为ISO8601格式
+			Date:      timestamp.Format(time.RFC3339),
 		}
 
 		if _, exists := driveMap[driveID]; !exists {
@@ -140,44 +145,47 @@ func getTripsWithPositions(startDate, endDate string) ([]DriveWithPositions, err
 		drives = append(drives, *drive)
 	}
 
-	fmt.Printf("实际返回的行程数: %d, 位置点总数: %d\n", len(drives), actualPositionCount)
+	logger.Info("trips fetched", "drive_count", len(drives), "position_count", actualPositionCount)
 	return drives, nil
 }
 
 func main() {
-	// 初始化数据库连接池
 	if err := initDB(); err != nil {
-		fmt.Printf("Failed to initialize database: %v\n", err)
+		logger.Error("database initialization failed", "error", err)
 		os.Exit(1)
 	}
 	defer dbPool.Close()
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
 
-	// 添加CORS中间件
+	// Simple CORS middleware
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type")
 
 		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
+			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
 		c.Next()
 	})
 
+	r.LoadHTMLFiles("map.html")
+
+	r.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "map.html", nil)
+	})
+
 	r.GET("/trips", func(c *gin.Context) {
 		startDate := c.DefaultQuery("start_date", "2000-01-01")
 		endDate := c.DefaultQuery("end_date", "3000-01-01")
 
-		// 日志记录查询参数
-		fmt.Printf("查询参数 - 开始时间: %s, 结束时间: %s\n", startDate, endDate)
-
-		trips, err := getTripsWithPositions(startDate, endDate)
+		trips, err := getTripsWithPositions(c.Request.Context(), startDate, endDate)
 		if err != nil {
-			fmt.Printf("查询失败: %v\n", err)
+			logger.Error("query failed", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   err.Error(),
 				"message": "Failed to fetch trips data",
@@ -185,37 +193,35 @@ func main() {
 			return
 		}
 
-		fmt.Printf("查询到 %d 个行程\n", len(trips))
 		c.JSON(http.StatusOK, gin.H{
 			"data":  trips,
 			"count": len(trips),
 		})
 	})
 
-	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "map.html", nil)
-	})
-
-	r.LoadHTMLFiles("map.html")
-	r.GET("/map", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "map.html", nil)
-	})
-
-	// 健康检查端点
 	r.GET("/health", func(c *gin.Context) {
-		if err := dbPool.Ping(context.Background()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := dbPool.Ping(ctx); err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":   "unhealthy",
-				"database": "disconnected",
+				"status": "unhealthy",
+				"error":  "database disconnected",
 			})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"status":   "healthy",
-			"database": "connected",
+			"status": "healthy",
 		})
 	})
 
-	fmt.Println("Tesla Track Map 2.0 starting on :8080")
-	r.Run(":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	logger.Info("Tesla Track Map starting", "port", port)
+	if err := r.Run(":" + port); err != nil {
+		logger.Error("server failed to start", "error", err)
+	}
 }
