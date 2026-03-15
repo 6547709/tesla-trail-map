@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeslaMate Drive Map 2.0</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 180px;
+        }
+
+        .custom-input-group {
+            min-width: 120px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            color: #34495e;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .datetime-input {
+            padding: 10px 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            height: 40px;
+        }
+
+        .datetime-input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .speed-options {
+            display: flex;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 2px;
+            gap: 1px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+            height: 40px;
+        }
+
+        .speed-btn {
+            flex: 1;
+            padding: 6px 4px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #6c757d;
+            border: none;
+            background: transparent;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .speed-btn:hover {
+            color: #495057;
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .speed-btn.active {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .speed-btn.recommended::after {
+            content: "★";
+            position: absolute;
+            top: -1px;
+            right: -1px;
+            color: #f39c12;
+            font-size: 9px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 40px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.loading {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .btn.loading i {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        #map {
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            min-width: 200px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-label {
+            color: #7f8c8d;
+            font-weight: 500;
+        }
+
+        .info-value {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .status-connected {
+            background-color: #2ecc71;
+            animation: pulse 2s ease-in-out infinite alternate;
+        }
+
+        .status-loading {
+            background-color: #f39c12;
+            animation: pulse 1s ease-in-out infinite alternate;
+        }
+
+        .status-error {
+            background-color: #e74c3c;
+        }
+
+        @keyframes pulse {
+            from { opacity: 1; }
+            to { opacity: 0.3; }
+        }
+
+        .smart-recommendation-toast {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: rgba(52, 152, 219, 0.95);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 10001;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            max-width: 280px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .smart-recommendation-toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .recommendation-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .recommendation-icon {
+            font-size: 16px;
+            color: #f1c40f;
+        }
+
+        .recommendation-message {
+            flex: 1;
+            line-height: 1.3;
+        }
+
+        .recommendation-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .recommendation-action-btn {
+            padding: 4px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .recommendation-action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+
+        .recommendation-action-btn.dismiss {
+            background: rgba(0, 0, 0, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .recommendation-action-btn.dismiss:hover {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 15px;
+            }
+
+            .controls {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .control-group {
+                min-width: 100%;
+            }
+
+            .info-panel {
+                position: relative;
+                top: auto;
+                right: auto;
+                margin: 10px;
+                margin-bottom: 0;
+            }
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(46, 204, 113, 0.95);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.error {
+            background: rgba(231, 76, 60, 0.95);
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .car-marker {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <i class="fas fa-car"></i>
+                TeslaMate Drive Map 2.0
+            </h1>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="startTime">开始时间</label>
+                    <input type="datetime-local" id="startTime" class="datetime-input">
+                </div>
+                <div class="control-group">
+                    <label for="endTime">结束时间</label>
+                    <input type="datetime-local" id="endTime" class="datetime-input">
+                </div>
+                <div class="control-group">
+                    <label>动画速度</label>
+                    <div class="speed-options">
+                        <button class="speed-btn" data-speed="0.5" data-label="慢">
+                            慢<br>0.5x
+                        </button>
+                        <button class="speed-btn active" data-speed="1" data-label="中">
+                            中<br>1x
+                        </button>
+                        <button class="speed-btn" data-speed="3" data-label="快">
+                            快<br>3x
+                        </button>
+                        <button class="speed-btn" data-speed="custom" data-label="自定义">
+                            自定义
+                        </button>
+                    </div>
+                </div>
+                <div class="control-group custom-input-group" id="customInputGroup" style="display: none;">
+                    <label>自定义速度</label>
+                    <div style="display: flex; align-items: center; gap: 4px; height: 40px;">
+                        <input type="number" class="datetime-input" id="customInput" min="0.1" max="10" step="0.1" value="2" style="width: 80px; text-align: center;">
+                        <span style="font-size: 14px; color: #6c757d;">x</span>
+                    </div>
+                </div>
+                <button class="btn" id="showDrivesBtn" onclick="fetchAndDrawData()">
+                    <i class="fas fa-play"></i>
+                    显示行程
+                </button>
+            </div>
+        </div>
+        
+        <div style="position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+            <div id="map"></div>
+            <div class="info-panel">
+                <div class="info-item">
+                    <span class="info-label">状态:</span>
+                    <span class="info-value">
+                        <span class="status-indicator status-connected" id="statusIndicator"></span>
+                        <span id="statusText">就绪</span>
+                    </span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">行程数:</span>
+                    <span class="info-value" id="driveCount">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">位置点数:</span>
+                    <span class="info-value" id="positionCount">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    
+    <div class="smart-recommendation-toast" id="smartRecommendationToast">
+        <div class="recommendation-content">
+            <i class="fas fa-lightbulb recommendation-icon"></i>
+            <div class="recommendation-message" id="recommendationMessage">
+                建议使用快速模式浏览长途行程
+            </div>
+        </div>
+        <div class="recommendation-actions">
+            <button class="recommendation-action-btn" onclick="applyRecommendation()">应用</button>
+            <button class="recommendation-action-btn dismiss" onclick="dismissRecommendation()">忽略</button>
+        </div>
+    </div>
+
+    <script>
+        // 初始化地图
+        var map = L.map('map').setView([39.9042, 116.4074], 10);
+
+        // 添加瓦片图层
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // 全局变量
+        let currentPolyline = null;
+        let currentAnimation = null;
+        let isLoading = false;
+
+        // DOM 元素
+        const speedButtons = document.querySelectorAll('.speed-btn');
+        const smartRecommendationToast = document.getElementById('smartRecommendationToast');
+        const recommendationMessage = document.getElementById('recommendationMessage');
+        const customInput = document.getElementById('customInput');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const driveCountElement = document.getElementById('driveCount');
+        const positionCountElement = document.getElementById('positionCount');
+        const showDrivesBtn = document.getElementById('showDrivesBtn');
+        const toast = document.getElementById('toast');
+
+        // 当前速度设置
+        let currentSpeed = 1;
+        let recommendedSpeed = 1;
+        let userHasChangedSpeed = false;
+        let currentRecommendation = null;
+
+        // 速度按钮事件处理
+        speedButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const speed = this.dataset.speed;
+                
+                userHasChangedSpeed = true;
+                
+                speedButtons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                const customGroup = document.getElementById('customInputGroup');
+                if (speed === 'custom') {
+                    customGroup.style.display = 'flex';
+                    customGroup.style.flexDirection = 'column';
+                    currentSpeed = parseFloat(customInput.value) || 2;
+                    console.log('显示自定义输入组，当前速度:', currentSpeed + 'x');
+                } else {
+                    customGroup.style.display = 'none';
+                    currentSpeed = parseFloat(speed);
+                    console.log('隐藏自定义输入组，速度:', currentSpeed + 'x');
+                }
+                
+                console.log('用户手动设置速度为:', currentSpeed + 'x');
+            });
+        });
+
+        // 自定义速度输入处理
+        customInput.addEventListener('input', function() {
+            if (document.querySelector('.speed-btn[data-speed="custom"]').classList.contains('active')) {
+                currentSpeed = parseFloat(this.value) || 2;
+                userHasChangedSpeed = true;
+                console.log('用户自定义速度:', currentSpeed + 'x');
+            }
+        });
+
+        // 智能速度推荐算法
+        function getSmartSpeed(tripData) {
+            if (!tripData || !tripData.length) {
+                return { speed: 1, reason: "默认正常速度", confidence: "medium" };
+            }
+
+            let totalDurationHours = 0;
+            let totalPositions = 0;
+            let earliestTime = null;
+            let latestTime = null;
+
+            tripData.forEach(drive => {
+                if (drive.positions && drive.positions.length > 0) {
+                    totalPositions += drive.positions.length;
+                    
+                    const positions = drive.positions;
+                    const startTime = new Date(positions[0].date);
+                    const endTime = new Date(positions[positions.length - 1].date);
+                    
+                    if (!earliestTime || startTime < earliestTime) earliestTime = startTime;
+                    if (!latestTime || endTime > latestTime) latestTime = endTime;
+                    
+                    const durationMs = endTime - startTime;
+                    totalDurationHours += durationMs / (1000 * 60 * 60);
+                }
+            });
+
+            const totalTimeSpanHours = earliestTime && latestTime ? 
+                (latestTime - earliestTime) / (1000 * 60 * 60) : totalDurationHours;
+
+            console.log(`智能分析: ${tripData.length}个行程, ${totalPositions}个位置点, 行驶时间${totalDurationHours.toFixed(1)}h, 时间跨度${totalTimeSpanHours.toFixed(1)}h`);
+
+            if (totalDurationHours >= 3) {
+                return { 
+                    speed: 3, 
+                    reason: `行驶时间${totalDurationHours.toFixed(1)}小时，建议快速浏览`,
+                    confidence: "high" 
+                };
+            } else if (totalDurationHours >= 1) {
+                return { 
+                    speed: 1, 
+                    reason: `行驶时间${totalDurationHours.toFixed(1)}小时，建议正常播放`,
+                    confidence: "high" 
+                };
+            } else if (totalDurationHours > 0) {
+                const pointsPerMinute = totalPositions / (totalDurationHours * 60);
+                if (pointsPerMinute > 10) {
+                    return { 
+                        speed: 0.5, 
+                        reason: `短途精细轨迹(${totalDurationHours.toFixed(1)}h)，建议慢速观察`,
+                        confidence: "medium" 
+                    };
+                } else {
+                    return { 
+                        speed: 1, 
+                        reason: `短途行程(${totalDurationHours.toFixed(1)}h)，建议正常播放`,
+                        confidence: "medium" 
+                    };
+                }
+            }
+
+            return { speed: 1, reason: "默认正常播放速度", confidence: "low" };
+        }
+
+        // 应用智能推荐
+        function applySmartSpeed(recommendation) {
+            currentRecommendation = recommendation;
+            recommendedSpeed = recommendation.speed;
+            
+            speedButtons.forEach(btn => {
+                btn.classList.remove('recommended');
+                if (parseFloat(btn.dataset.speed) === recommendedSpeed) {
+                    btn.classList.add('recommended');
+                }
+            });
+            
+            const shouldShowRecommendation = 
+                !userHasChangedSpeed && 
+                currentSpeed === 1 && 
+                recommendedSpeed !== 1;
+            
+            if (shouldShowRecommendation) {
+                showRecommendationToast(recommendation);
+                console.log('显示智能推荐提示:', recommendation.speed + 'x');
+            } else {
+                console.log('智能推荐已分析，静默标记推荐选项:', recommendation.speed + 'x');
+                if (userHasChangedSpeed) {
+                    console.log('用户已自定义速度，不显示推荐提示');
+                }
+            }
+        }
+
+        function showRecommendationToast(recommendation) {
+            recommendationMessage.textContent = recommendation.reason;
+            smartRecommendationToast.classList.add('show');
+            
+            setTimeout(() => {
+                if (smartRecommendationToast.classList.contains('show')) {
+                    dismissRecommendation();
+                }
+            }, 5000);
+        }
+
+        function applyRecommendation() {
+            if (currentRecommendation) {
+                selectSpeed(currentRecommendation.speed);
+                showToast(`已应用推荐速度: ${currentRecommendation.speed}x`);
+                dismissRecommendation();
+                console.log('用户应用了推荐速度:', currentRecommendation.speed + 'x');
+            }
+        }
+
+        function dismissRecommendation() {
+            smartRecommendationToast.classList.remove('show');
+            console.log('推荐提示已关闭');
+        }
+
+        function selectSpeed(speed) {
+            speedButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (parseFloat(btn.dataset.speed) === speed) {
+                    btn.classList.add('active');
+                    currentSpeed = speed;
+                }
+            });
+            
+            const isCustomSelected = document.querySelector('.speed-btn[data-speed="custom"]').classList.contains('active');
+            const customGroup = document.getElementById('customInputGroup');
+            if (isCustomSelected) {
+                customGroup.style.display = 'flex';
+                customGroup.style.flexDirection = 'column';
+            } else {
+                customGroup.style.display = 'none';
+            }
+            
+            console.log('selectSpeed 函数调用，速度:', speed, '自定义模式:', isCustomSelected);
+        }
+
+        function getCurrentSpeed() {
+            return currentSpeed;
+        }
+
+        function setStatus(status, text) {
+            statusIndicator.className = 'status-indicator status-' + status;
+            statusText.textContent = text;
+        }
+
+        function showToast(message, isError = false) {
+            toast.textContent = message;
+            toast.className = 'toast' + (isError ? ' error' : '') + ' show';
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 3000);
+        }
+
+        function setLoading(loading) {
+            isLoading = loading;
+            const btn = showDrivesBtn;
+            if (loading) {
+                btn.className = 'btn loading';
+                btn.innerHTML = '<i class="fas fa-spinner"></i> 加载中...';
+                setStatus('loading', '加载中');
+            } else {
+                btn.className = 'btn';
+                btn.innerHTML = '<i class="fas fa-play"></i> 显示行程';
+                setStatus('connected', '就绪');
+            }
+        }
+
+        function moveCarMarkerAndPath(latlngs, duration) {
+            if (currentAnimation) {
+                map.removeLayer(currentAnimation);
+            }
+            if (currentPolyline) {
+                map.removeLayer(currentPolyline);
+            }
+
+            if (latlngs.length === 0) {
+                showToast('没有找到轨迹数据', true);
+                return;
+            }
+
+            try {
+                currentAnimation = L.motion.polyline(latlngs, {
+                    color: "#3498db",
+                    weight: 4,
+                    opacity: 0.8
+                }, {
+                    auto: true,
+                    duration: duration
+                }, {
+                    removeOnEnd: false,
+                    showMarker: true,
+                    icon: L.divIcon({
+                        html: '<i class="fas fa-car" style="color: #e74c3c; font-size: 20px;"></i>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10],
+                        className: 'car-marker'
+                    })    
+                }).addTo(map);
+
+                currentAnimation.on('end', function() {
+                    showToast('动画播放完成');
+                    setStatus('connected', '完成');
+                });
+
+            } catch (error) {
+                console.error('创建动画失败:', error);
+                showToast('创建动画失败', true);
+            }
+        }
+
+        async function fetchAndDrawData() {
+            if (isLoading) return;
+
+            const startTimeStr = document.getElementById('startTime').value;
+            const endTimeStr = document.getElementById('endTime').value;
+            
+            console.log('开始时间:', startTimeStr, '结束时间:', endTimeStr);
+            
+            if (!isValidDateTime(startTimeStr) || !isValidDateTime(endTimeStr)) {
+                showToast('请选择有效的日期时间', true);
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const startTime = new Date(startTimeStr);
+                const endTime = new Date(endTimeStr);
+                
+                if (startTime >= endTime) {
+                    showToast('开始时间必须早于结束时间', true);
+                    setLoading(false);
+                    return;
+                }
+
+                const startTimeUTC = startTime.toISOString().slice(0,19);
+                const endTimeUTC = endTime.toISOString().slice(0,19);
+
+                console.log('请求URL:', `/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
+
+                const response = await fetch(`/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('响应错误:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log("获取到的完整响应:", result);
+
+                const data = result.data || result;
+                
+                if (!Array.isArray(data)) {
+                    console.error('数据格式错误:', typeof data, data);
+                    showToast('服务器返回的数据格式不正确', true);
+                    setLoading(false);
+                    return;
+                }
+                
+                if (data.length === 0) {
+                    showToast('没有找到指定时间范围内的行程数据', true);
+                    driveCountElement.textContent = '0';
+                    positionCountElement.textContent = '0';
+                    setLoading(false);
+                    return;
+                }
+
+                console.log('行程数据:', data.length, '个行程');
+
+                const allPositions = data.flatMap(drive => {
+                    console.log('行程', drive.drive_id, '有', (drive.positions || []).length, '个位置点');
+                    return drive.positions || [];
+                }).sort((a, b) => new Date(a.date) - new Date(b.date));
+                
+                console.log('总位置点数:', allPositions.length);
+                
+                if (allPositions.length === 0) {
+                    showToast('行程数据中没有位置信息', true);
+                    driveCountElement.textContent = data.length.toString();
+                    positionCountElement.textContent = '0';
+                    setLoading(false);
+                    return;
+                }
+
+                const latlngs = allPositions.map(pos => {
+                    if (typeof pos.latitude !== 'number' || typeof pos.longitude !== 'number') {
+                        console.warn('无效的位置数据:', pos);
+                        return null;
+                    }
+                    return [pos.latitude, pos.longitude];
+                }).filter(pos => pos !== null);
+
+                console.log('有效位置点数:', latlngs.length);
+
+                if (latlngs.length === 0) {
+                    showToast('没有有效的位置数据', true);
+                    setLoading(false);
+                    return;
+                }
+
+                driveCountElement.textContent = data.length;
+                positionCountElement.textContent = allPositions.length;
+
+                const speedRecommendation = getSmartSpeed(data);
+                applySmartSpeed(speedRecommendation);
+
+                const bounds = L.latLngBounds(latlngs);
+                map.fitBounds(bounds, { padding: [20, 20] });
+
+                const finalSpeed = getCurrentSpeed();
+                const finalDuration = 8000 / finalSpeed;
+
+                moveCarMarkerAndPath(latlngs, finalDuration);
+                showToast(`开始播放 ${data.length} 个行程的轨迹 (${finalSpeed}x速度)`);
+
+            } catch (error) {
+                console.error("获取数据失败:", error);
+                showToast('获取数据失败: ' + error.message, true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function setDefaultValues() {
+            const now = new Date();
+            const yesterday = new Date(now);
+            yesterday.setDate(now.getDate() - 1);
+            yesterday.setHours(0, 0, 0, 0);
+            now.setHours(23, 59, 59, 999);
+
+            document.getElementById('startTime').value = formatDateToInputString(yesterday);
+            document.getElementById('endTime').value = formatDateToInputString(now);
+        }
+
+        function formatDateToInputString(date) {
+            const YYYY = date.getFullYear();
+            const MM = String(date.getMonth() + 1).padStart(2, '0');
+            const DD = String(date.getDate()).padStart(2, '0');
+            const HH = String(date.getHours()).padStart(2, '0');
+            const MI = String(date.getMinutes()).padStart(2, '0');
+            return `${YYYY}-${MM}-${DD}T${HH}:${MI}`;
+        }
+
+        function isValidDateTime(dateTimeStr) {
+            if (!dateTimeStr) return false;
+            const regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+            return regex.test(dateTimeStr);
+        }
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/health');
+                const health = await response.json();
+                
+                if (health.status === 'healthy') {
+                    setStatus('connected', '数据库已连接');
+                } else {
+                    setStatus('error', '数据库连接失败');
+                    showToast('数据库连接失败，请检查配置', true);
+                }
+            } catch (error) {
+                setStatus('error', '服务不可用');
+                showToast('无法连接到服务器', true);
+            }
+        }
+
+        window.addEventListener('load', function() {
+            setDefaultValues();
+            setStatus('connected', '就绪');
+            checkHealth();
+            
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
+
+            const customGroup = document.getElementById('customInputGroup');
+            console.log('自定义输入组元素:', customGroup);
+            console.log('自定义输入组是否存在:', customGroup !== null);
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                fetchAndDrawData();
+            }
+        });
+    </script>
+
+</body>
+</html>
