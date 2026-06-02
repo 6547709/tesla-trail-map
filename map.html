@@ -337,6 +337,31 @@
             font-style: italic;
             cursor: default;
         }
+
+        /* ─── App version badge in the header ─── */
+        .app-version {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #9b9b9b;
+            background: #f4f4f4;
+            border: 1px solid #e0e0e0;
+            border-radius: 999px;
+            padding: 2px 8px;
+            margin-left: 4px;
+            cursor: help;
+            transition: all 0.2s ease;
+        }
+        .app-version.is-latest {
+            color: #2ecc71;
+            background: rgba(46, 204, 113, 0.08);
+            border-color: rgba(46, 204, 113, 0.25);
+        }
+        .app-version.is-outdated {
+            color: var(--tesla-red);
+            background: rgba(232, 30, 37, 0.08);
+            border-color: rgba(232, 30, 37, 0.25);
+        }
     </style>
 </head>
 <body>
@@ -345,7 +370,7 @@
             <h1>
                 <svg class="tesla-logo" viewBox="0 0 342 352.22" xmlns="http://www.w3.org/2000/svg"><path d="M0 35.22h342c-23.36 41.22-68.51 68.61-119.82 73.57L222.18 108.79l32.12 31.78c-4.43.34-8.86.67-13.3 1.01l-10.42-10.3c-3.15.34-6.31.67-9.46 1.01l10.42 10.3c-1.14.11-2.28.22-3.42.34l-10.42-10.3c-1.29.11-2.58.22-3.87.34l10.42 10.3c-.57.06-1.14.11-1.71.17l-10.42-10.3c-2.15.17-4.29.34-6.44.51l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.43.03-.86.07-1.28.1l-10.42-10.3c-.29.02-.57.05-.86.07l10.42 10.3c-.86.07-1.71.13-2.57.2l-10.42-10.3c-.57.05-1.14.09-1.71.14l10.42 10.3c-2 .16-4 .32-6 .48l10.42 10.3c-.43.03-.86.07-1.28.1l-10.42-10.3c-3.29.26-6.58.53-9.87.79l10.42 10.3c-1 .08-2 .16-3 .24l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14" fill="currentColor"/></svg>
                 TeslaMate Trail Map
-                <span style="font-size:11px;font-weight:500;color:#9b9b9b;letter-spacing:0.5px;">v1.5</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.5 (latest)">v1.5</span>
             </h1>
             <div class="controls">
                 <div class="control-group">
@@ -404,6 +429,10 @@
                     <span class="info-label">Data Points:</span>
                     <span class="info-value" id="positionCount">0</span>
                 </div>
+                <div class="info-item">
+                    <span class="info-label">Version:</span>
+                    <span class="info-value" id="versionLabel">v1.5</span>
+                </div>
             </div>
         </div>
     </div>
@@ -441,6 +470,11 @@
         let currentCarName = 'All Cars';
         let hasLoadedOnce = false;  // B13 — prevents auto-fetch on first car selection
         let inflightAbort = null;   // B14 — cancel previous request when a new one starts
+
+        // App version — defaults match the build constant in main.go.
+        // /version may overwrite these at runtime if the server reports otherwise.
+        const DEFAULT_VERSION = 'v1.5';
+        const DEFAULT_LATEST  = 'v1.5';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -718,6 +752,46 @@
         }
         // ──────────────────────────────────────────────────────────────────
 
+        // ─── App version badge ────────────────────────────────────────────
+        // Renders the version pill in the header and the "Version" row in
+        // the info panel. Defaults to v1.5 (current). If /version reports a
+        // newer LatestVersion, we mark this build as outdated.
+        async function loadVersion() {
+            const badge = document.getElementById('appVersion');
+            const label = document.getElementById('versionLabel');
+            // Render the build-time defaults immediately so users see a
+            // version even if /version is slow or fails.
+            applyVersionState(DEFAULT_VERSION, DEFAULT_LATEST);
+            try {
+                const res = await fetch('/version', { cache: 'no-store' });
+                if (!res.ok) return;
+                const j = await res.json();
+                const cur    = j.version        ? 'v' + j.version        : DEFAULT_VERSION;
+                const latest = j.latest_version ? 'v' + j.latest_version : DEFAULT_LATEST;
+                applyVersionState(cur, latest);
+            } catch (err) {
+                console.warn('version probe failed, keeping defaults:', err);
+            }
+        }
+
+        function applyVersionState(current, latest) {
+            const badge = document.getElementById('appVersion');
+            const label = document.getElementById('versionLabel');
+            const isLatest = current === latest;
+            if (badge) {
+                badge.textContent = current;
+                badge.classList.remove('is-latest', 'is-outdated');
+                badge.classList.add(isLatest ? 'is-latest' : 'is-outdated');
+                badge.title = isLatest
+                    ? `Current build: ${current} (latest)`
+                    : `Current build: ${current} — latest is ${latest}`;
+            }
+            if (label) {
+                label.textContent = current + (isLatest ? ' (latest)' : ` → ${latest}`);
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         function showToast(message, isError = false) {
             toast.textContent = message;
             toast.className = 'toast' + (isError ? ' error' : '') + ' show';
@@ -975,6 +1049,7 @@
             setStatus('connected', 'Ready');
             checkHealth();
             loadCars();      // populate vehicle switcher
+            loadVersion();   // render version badge & detect newer release
 
             setTimeout(() => {
                 map.invalidateSize();

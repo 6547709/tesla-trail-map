@@ -166,8 +166,15 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
 
 ### `GET /version`
 ```json
-{ "name": "tesla-trail-map", "version": "1.5", "go": "go1.25.x" }
+{
+  "name": "tesla-trail-map",
+  "version": "1.5",
+  "latest_version": "1.5",
+  "is_latest": true,
+  "go": "go1.25.x"
+}
 ```
+前端使用此接口比对当前版本与最新版本：相同则在 header 显示绿色 `v1.5 (latest)`，否则显示红色提示更新。
 
 ---
 

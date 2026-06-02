@@ -13,6 +13,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 - **多车切换器**：UI 顶部新增 Vehicle 段，按车辆名字（不是 ID）切换；副标题显示行驶次数，hover tooltip 显示市场名称。
 - `GET /cars` 路由：返回当前账号下所有车辆，带 `name` / `model` / `marketing_name` / `drive_count`。
 - `GET /version` 路由：返回构建版本与 Go 版本，便于部署校验。
+  - 同时返回 `latest_version` 与 `is_latest`，前端据此渲染版本徽章（绿色 = 最新 / 红色 = 需更新）。
+  - 默认值：`version=1.5`，`latest_version=1.5`，`is_latest=true`。
 - `/trips` 新增 `?car_id=N` 参数（缺省 = 全部车辆）。
 - `/trips` 新增 `?max_points=N` 服务端抽稀，单趟最多 N 点 + 首末。
 - 时间格式更宽松：支持 `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM` / `YYYY-MM-DDTHH:MM:SS` / 带时区。
@@ -57,6 +59,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 - **Multi-vehicle switcher** in the header — pick by car **name**, not by raw `car_id`. Drive-count subscript and marketing-name tooltip included.
 - `GET /cars` returns every vehicle with `name`, `model`, `marketing_name`, `drive_count`.
 - `GET /version` for deploy-time verification.
+  - Also returns `latest_version` and `is_latest`, which the UI uses to render the header pill (green = up to date / red = update available).
+  - Defaults: `version=1.5`, `latest_version=1.5`, `is_latest=true`.
 - `/trips` accepts `?car_id=N` (omit = all cars).
 - `/trips` accepts `?max_points=N` for server-side downsampling (keeps first/last + every ⌈total/N⌉-th point).
 - Flexible time-input parser: `YYYY-MM-DD`, `YYYY-MM-DDTHH:MM[:SS]`, with optional timezone.

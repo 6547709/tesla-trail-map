@@ -26,6 +26,11 @@ var (
 // CHANGELOG.md and the git tag (e.g. v1.5).
 const Version = "1.5"
 
+// LatestVersion is the latest released version this build is aware of.
+// Kept equal to Version on every release so /version can flag itself as
+// "up to date" without needing to call out to GitHub.
+const LatestVersion = "1.5"
+
 type Position struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
@@ -557,11 +562,15 @@ func main() {
 	})
 
 	// /version — tiny endpoint so deployers can verify which build is live.
+	// Also exposes the latest known release so the UI can show an "up to date"
+	// indicator without calling GitHub.
 	r.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"name":    "tesla-trail-map",
-			"version": Version,
-			"go":      runtime.Version(),
+			"name":           "tesla-trail-map",
+			"version":        Version,
+			"latest_version": LatestVersion,
+			"is_latest":      Version == LatestVersion,
+			"go":             runtime.Version(),
 		})
 	})
 

@@ -159,8 +159,15 @@ DB ping + pgxpool live stats:
 
 ### `GET /version`
 ```json
-{ "name": "tesla-trail-map", "version": "1.5", "go": "go1.25.x" }
+{
+  "name": "tesla-trail-map",
+  "version": "1.5",
+  "latest_version": "1.5",
+  "is_latest": true,
+  "go": "go1.25.x"
+}
 ```
+The frontend hits this endpoint to compare the running build against the latest known release: matched → green `v1.5 (latest)` pill in the header; mismatched → red badge prompting an update.
 
 ---
 
