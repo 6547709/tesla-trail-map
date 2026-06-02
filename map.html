@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Drive Map 2.0</title>
+    <title>TeslaMate Trail Map v1.5</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
@@ -291,6 +291,52 @@
         .tesla-car-icon {
             filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
         }
+
+        /* ─── Car switcher (per-vehicle filter) ─── */
+        .car-switcher {
+            display: flex;
+            background: #f4f4f4;
+            border-radius: 6px;
+            padding: 3px;
+            gap: 4px;
+            height: 38px;
+            border: 1px solid #d0d1d2;
+            min-width: 200px;
+        }
+        .car-btn {
+            flex: 1;
+            padding: 0 14px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #5c5e62;
+            border: none;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .car-btn:hover { background: rgba(0, 0, 0, 0.05); }
+        .car-btn.active {
+            background: white;
+            color: var(--tesla-red);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+        .car-btn .car-count {
+            font-size: 10px;
+            color: #9b9b9b;
+            font-weight: 500;
+        }
+        .car-btn.active .car-count { color: rgba(232, 30, 37, 0.6); }
+        .car-btn-loading {
+            color: #9b9b9b;
+            font-style: italic;
+            cursor: default;
+        }
     </style>
 </head>
 <body>
@@ -299,8 +345,15 @@
             <h1>
                 <svg class="tesla-logo" viewBox="0 0 342 352.22" xmlns="http://www.w3.org/2000/svg"><path d="M0 35.22h342c-23.36 41.22-68.51 68.61-119.82 73.57L222.18 108.79l32.12 31.78c-4.43.34-8.86.67-13.3 1.01l-10.42-10.3c-3.15.34-6.31.67-9.46 1.01l10.42 10.3c-1.14.11-2.28.22-3.42.34l-10.42-10.3c-1.29.11-2.58.22-3.87.34l10.42 10.3c-.57.06-1.14.11-1.71.17l-10.42-10.3c-2.15.17-4.29.34-6.44.51l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.43.03-.86.07-1.28.1l-10.42-10.3c-.29.02-.57.05-.86.07l10.42 10.3c-.86.07-1.71.13-2.57.2l-10.42-10.3c-.57.05-1.14.09-1.71.14l10.42 10.3c-2 .16-4 .32-6 .48l10.42 10.3c-.43.03-.86.07-1.28.1l-10.42-10.3c-3.29.26-6.58.53-9.87.79l10.42 10.3c-1 .08-2 .16-3 .24l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14l-10.42-10.3c-2.43.2-4.86.39-7.29.59l10.42 10.3c-.14.01-.29.02-.43.03l-10.42-10.3c-.14.01-.29.02-.43.03l10.42 10.3c-.57.05-1.14.09-1.71.14" fill="currentColor"/></svg>
                 TeslaMate Trail Map
+                <span style="font-size:11px;font-weight:500;color:#9b9b9b;letter-spacing:0.5px;">v1.5</span>
             </h1>
             <div class="controls">
+                <div class="control-group">
+                    <label>Vehicle</label>
+                    <div class="car-switcher" id="carSwitcher">
+                        <button class="car-btn car-btn-loading" disabled>Loading…</button>
+                    </div>
+                </div>
                 <div class="control-group">
                     <label for="startTime">Start Time</label>
                     <input type="datetime-local" id="startTime" class="datetime-input">
@@ -338,6 +391,10 @@
                         <span class="status-indicator status-connected" id="statusIndicator"></span>
                         <span id="statusText">Ready</span>
                     </span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Vehicle:</span>
+                    <span class="info-value" id="currentCarLabel">—</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Drives:</span>
@@ -378,6 +435,13 @@
         let currentAnimation = null;
         let isLoading = false;
 
+        // Vehicle (car) state — populated from /cars on load.
+        let availableCars = [];
+        let currentCarId = 0;       // 0 = "All cars"
+        let currentCarName = 'All Cars';
+        let hasLoadedOnce = false;  // B13 — prevents auto-fetch on first car selection
+        let inflightAbort = null;   // B14 — cancel previous request when a new one starts
+
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
         const smartRecommendationToast = document.getElementById('smartRecommendationToast');
@@ -389,6 +453,8 @@
         const positionCountElement = document.getElementById('positionCount');
         const showDrivesBtn = document.getElementById('showDrivesBtn');
         const toast = document.getElementById('toast');
+        const carSwitcher = document.getElementById('carSwitcher');
+        const currentCarLabel = document.getElementById('currentCarLabel');
 
         // Current speed settings
         let currentSpeed = 1;
@@ -578,6 +644,80 @@
             statusText.textContent = text;
         }
 
+        // ─── Car switcher ─────────────────────────────────────────────────
+        async function loadCars() {
+            try {
+                const res = await fetch('/cars');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                availableCars = json.data || [];
+                renderCarSwitcher();
+            } catch (err) {
+                console.warn('Failed to load cars:', err);
+                carSwitcher.innerHTML =
+                    '<button class="car-btn car-btn-loading" disabled>No cars</button>';
+            }
+        }
+
+        function renderCarSwitcher() {
+            carSwitcher.innerHTML = '';
+            // "All" tab — only when there is more than one car (otherwise redundant)
+            if (availableCars.length > 1) {
+                carSwitcher.appendChild(makeCarButton({
+                    id: 0, name: 'All', drive_count:
+                        availableCars.reduce((s, c) => s + (c.drive_count || 0), 0)
+                }));
+            }
+            availableCars.forEach(car => {
+                carSwitcher.appendChild(makeCarButton(car));
+            });
+
+            // Default selection: first real car if exactly one car, else "All".
+            if (availableCars.length === 1) {
+                selectCar(availableCars[0].id, availableCars[0].name);
+            } else {
+                selectCar(0, 'All Cars');
+            }
+        }
+
+        function makeCarButton(car) {
+            const btn = document.createElement('button');
+            btn.className = 'car-btn';
+            btn.dataset.carId = car.id;
+            btn.dataset.carName = car.name;
+            btn.innerHTML = car.drive_count !== undefined && car.id !== 0
+                ? `${escapeHtml(car.name)} <span class="car-count">${car.drive_count}</span>`
+                : escapeHtml(car.name);
+            btn.title = car.marketing_name
+                ? `${car.name} • ${car.marketing_name}`
+                : car.name;
+            btn.addEventListener('click', () => selectCar(car.id, car.name));
+            return btn;
+        }
+
+        function selectCar(id, name) {
+            const changed = (id !== currentCarId);
+            currentCarId = id;
+            currentCarName = name;
+            currentCarLabel.textContent = name;
+            carSwitcher.querySelectorAll('.car-btn').forEach(b => {
+                b.classList.toggle('active', String(b.dataset.carId) === String(id));
+            });
+            console.log('Selected car:', id, name);
+            // B13 — switching the vehicle should auto-refresh the trail,
+            // but only if the user has loaded data at least once.
+            if (changed && hasLoadedOnce && !isLoading) {
+                fetchAndDrawData();
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         function showToast(message, isError = false) {
             toast.textContent = message;
             toast.className = 'toast' + (isError ? ' error' : '') + ' show';
@@ -665,6 +805,13 @@
                 return;
             }
 
+            // B14 — abort any previous in-flight request
+            if (inflightAbort) { try { inflightAbort.abort(); } catch (_) {} }
+            inflightAbort = new AbortController();
+
+            // B12 — reset speed-recommend lock so each new query can re-suggest
+            userHasChangedSpeed = false;
+
             setLoading(true);
 
             try {
@@ -680,16 +827,25 @@
                 const startTimeUTC = startTime.toISOString().slice(0,19);
                 const endTimeUTC = endTime.toISOString().slice(0,19);
 
-                console.log('Request URL:', `/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
+                const carParam = currentCarId > 0 ? `&car_id=${currentCarId}` : '';
+                console.log('Request URL:', `/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}${carParam}&max_points=2000`);
 
-                const response = await fetch(`/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}`);
+                const response = await fetch(
+                    `/trips?start_date=${startTimeUTC}&end_date=${endTimeUTC}${carParam}&max_points=2000`,
+                    { signal: inflightAbort.signal }
+                );
                 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.log('Response error:', response.status, errorText);
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    let msg = `HTTP ${response.status}`;
+                    try {
+                        const j = await response.json();
+                        if (j && j.message) msg = j.message;
+                    } catch (_) {}
+                    console.log('Response error:', response.status, msg);
+                    throw new Error(msg);
                 }
 
+                hasLoadedOnce = true;
                 const result = await response.json();
                 console.log("Full response received:", result);
 
@@ -759,10 +915,15 @@
                 showToast(`Started playing track for ${data.length} trips (${finalSpeed}x speed)`);
 
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Previous request aborted, ignored');
+                    return; // don't toast — this is intentional cancellation
+                }
                 console.log("Failed to fetch data:", error);
-                showToast('Failed to fetch data: ' + error.message, true);
+                showToast(error.message || 'Failed to fetch data', true);
             } finally {
                 setLoading(false);
+                inflightAbort = null;
             }
         }
 
@@ -813,7 +974,8 @@
             setDefaultValues();
             setStatus('connected', 'Ready');
             checkHealth();
-            
+            loadCars();      // populate vehicle switcher
+
             setTimeout(() => {
                 map.invalidateSize();
             }, 100);

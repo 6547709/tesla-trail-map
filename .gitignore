@@ -1,0 +1,23 @@
+# Build artifacts
+/teslaTrackMap
+/app
+/dist/
+*.exe
+
+# Go module workspace cache used by sandboxed builds
+.gopath/
+.gocache/
+
+# Local docs / probes / scratch — kept out of the public repo
+artifacts/
+tools/
+
+# WorkBuddy session metadata
+.workbuddy/
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
