@@ -52,6 +52,28 @@ go run .
 
 ### 2. Docker 部署
 
+#### 直接拉官方镜像（推荐）
+
+每次发 `vX.Y` tag，GitHub Actions 自动构建并推送 `linux/amd64` + `linux/arm64` 多架构镜像到 GHCR：
+
+```bash
+docker pull ghcr.io/6547709/tesla-trail-map:1.5
+# 也可以用 :latest（最新 tag 发布时同步更新）
+docker pull ghcr.io/6547709/tesla-trail-map:latest
+
+docker run -d --name tesla-trail-map -p 8080:8080 \
+  -e DATABASE_HOST=host.docker.internal \
+  -e DATABASE_PORT=5432 \
+  -e DATABASE_USER=teslamate \
+  -e DATABASE_PASS=your_password \
+  -e DATABASE_NAME=teslamate \
+  ghcr.io/6547709/tesla-trail-map:1.5
+```
+
+> Docker 会自动选你机器架构对应的层（x86_64 主机拿 amd64，Apple Silicon / 树莓派拿 arm64）。
+
+#### 自己构建
+
 ```bash
 docker build -t tesla-trail-map:1.5 .
 docker run -d --name tesla-trail-map -p 8080:8080 \
@@ -61,6 +83,14 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
   -e DATABASE_PASS=your_password \
   -e DATABASE_NAME=teslamate \
   tesla-trail-map:1.5
+```
+
+#### 本地多架构构建（可选）
+
+```bash
+docker buildx create --name multi --use 2>/dev/null || docker buildx use multi
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=v1.5 -t tesla-trail-map:1.5 --load .
 ```
 
 ---

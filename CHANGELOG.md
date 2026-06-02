@@ -21,6 +21,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 - 14 个 `DATABASE_*` 环境变量（池大小、生命周期、超时、缓存等）全量可调。
 - `/health` 输出 pgxpool 完整指标（acquire_count、empty_acquire、new_conns 等）。
 - 双语 README + CHANGELOG。
+- **CI/CD**：新增 `.github/workflows/docker-publish.yml`，每次 push `vX.Y` tag 自动构建 `linux/amd64` + `linux/arm64` 多架构镜像并推送到 `ghcr.io/6547709/tesla-trail-map`。Dockerfile 升级为 buildx 多架构（`TARGETOS/TARGETARCH` 交叉编译，无需 QEMU 编译）+ 非 root 运行 + HEALTHCHECK + OCI 标签。
 
 #### 修改（Changed）
 - **SQL 大改写**：把 WHERE 重心从 `drive_id =` 转到 `date BETWEEN`，让 BRIN(date) 起作用；7 天窗口从 28.7s → **2.0s**（14× 提速）。
@@ -67,6 +68,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 - 14 `DATABASE_*` env vars covering pool size, lifetimes, timeouts, caches.
 - `/health` exposes the full pgxpool stat block.
 - Bilingual README + CHANGELOG.
+- **CI/CD**: added `.github/workflows/docker-publish.yml`. Every `vX.Y` tag triggers a multi-arch build (`linux/amd64` + `linux/arm64`) pushed to `ghcr.io/6547709/tesla-trail-map`. Dockerfile is now a proper buildx multi-arch one (`TARGETOS/TARGETARCH` cross-compile, no QEMU compile step), runs as non-root, ships a HEALTHCHECK, and stamps OCI labels.
 
 #### Changed
 - **SQL rewrite**: shift WHERE focus from `drive_id =` to `date BETWEEN` so BRIN(date) wins; 7-day window 28.7s → **2.0s** (14× faster).
