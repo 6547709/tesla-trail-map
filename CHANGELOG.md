@@ -9,6 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ### 🇨🇳 中文
 
+#### 🔒 安全 / 配置（v1.6 patch）
+- **移除 DB 连接参数硬编码**：`DATABASE_HOST` / `DATABASE_USER` / `DATABASE_PASS` / `DATABASE_NAME` 不再有默认值，缺任一项服务**立即退出**并打印缺失项列表。杜绝新部署意外连接到旧环境（例如默认 `192.168.10.200` / `secret` 之类的开发凭据残留）。
+- 仅保留通用安全默认值：`DATABASE_PORT=5432`、`DATABASE_SSLMODE=disable`。
+
 #### 修复 / 加固（v1.6 后续 patch，同 tag）
 - **🔴 B17 高危**：`/trips?max_points=0&car_id=N>0` 触发 PG `SQLSTATE 42P18`（占位符 `$3` 类型推断失败）→ 修复：V1 / V2 分支独立计算 carCond 占位符索引（V1 用 `$3`、V2 用 `$4`）。
 - **🟡 B18**：`/cars` 失败时透传 DB error → 改成与 `/trips` 一致的 `{"message":"Failed to fetch vehicle list"}`。
@@ -21,6 +25,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 - HTTP server 加 `ReadHeaderTimeout: 5s` 防 Slowloris。
 
 ### 🇬🇧 English
+
+#### 🔒 Security / config (v1.6 patch)
+- **Removed hard-coded DB connection defaults**. `DATABASE_HOST`, `DATABASE_USER`, `DATABASE_PASS`, `DATABASE_NAME` are now mandatory — startup aborts immediately listing the missing variable(s). This prevents a fresh deployment from accidentally inheriting prior-environment defaults (e.g. legacy dev creds like `secret` / `192.168.10.200`).
+- Only universally-safe defaults remain: `DATABASE_PORT=5432`, `DATABASE_SSLMODE=disable`.
 
 #### Fixed / Hardened (v1.6 patch, same tag)
 - **🔴 B17 critical**: `/trips?max_points=0&car_id=N>0` triggered PG `SQLSTATE 42P18` (parameter `$3` type inference failed) → fix: V1 and V2 branches now compute the carCond placeholder index independently (V1 uses `$3`, V2 uses `$4`).

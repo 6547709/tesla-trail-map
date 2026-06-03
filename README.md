@@ -97,15 +97,22 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## ⚙️ 完整配置项
 
-### 必填
+### 必填（无默认值，缺任一启动失败）
+
+| 环境变量 | 必填 | 说明 |
+|---|---|---|
+| `DATABASE_HOST` | ✅ | TeslaMate PG 主机（IP 或域名） |
+| `DATABASE_USER` | ✅ | PG 用户名 |
+| `DATABASE_PASS` | ✅ | PG 密码（**绝不能**写进镜像或 git） |
+| `DATABASE_NAME` | ✅ | 数据库名 |
+
+> 自 v1.6 起，4 个连接核心参数已**完全移除硬编码默认值**。任一缺失服务会立即退出并打印缺失项，避免连错环境造成数据泄露。
+
+### 可选（带安全默认值）
 
 | 环境变量 | 默认值 | 说明 |
 |---|---|---|
-| `DATABASE_HOST` | `192.168.10.200` | TeslaMate PG 主机 |
-| `DATABASE_PORT` | `54320` | PG 端口 |
-| `DATABASE_USER` | `teslamate` | PG 用户 |
-| `DATABASE_PASS` | `secret` | PG 密码 ⚠️ 生产**必须**显式设置 |
-| `DATABASE_NAME` | `teslamate` | 数据库名 |
+| `DATABASE_PORT` | `5432` | PG 端口 |
 | `DATABASE_SSLMODE` | `disable` | `disable / require / verify-full` |
 
 ### 数据库连接池

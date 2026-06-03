@@ -98,15 +98,22 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## ⚙️ Configuration
 
-### Required
+### Required (no defaults — startup aborts if any is missing)
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_HOST` | ✅ | TeslaMate PG host (IP or hostname) |
+| `DATABASE_USER` | ✅ | PG user |
+| `DATABASE_PASS` | ✅ | PG password — **never** bake into images or commit to git |
+| `DATABASE_NAME` | ✅ | DB name |
+
+> Since v1.6, the four core connection parameters have **no hard-coded defaults**. Missing any of them aborts startup with an explicit error — preventing accidental connections to the wrong environment.
+
+### Optional (safe defaults)
 
 | Variable | Default | Notes |
 |---|---|---|
-| `DATABASE_HOST` | `192.168.10.200` | TeslaMate PG host |
-| `DATABASE_PORT` | `54320` | PG port |
-| `DATABASE_USER` | `teslamate` | PG user |
-| `DATABASE_PASS` | `secret` | ⚠️ MUST be set explicitly in production |
-| `DATABASE_NAME` | `teslamate` | DB name |
+| `DATABASE_PORT` | `5432` | PG port |
 | `DATABASE_SSLMODE` | `disable` | `disable / require / verify-full` |
 
 ### Connection pool

@@ -122,20 +122,45 @@ func envDur(key string, def time.Duration) time.Duration {
 }
 
 // buildConnString builds a DSN with performance-related Postgres params.
-func buildConnString() string {
-	host := envOr("DATABASE_HOST", "192.168.10.200")
-	port := envInt("DATABASE_PORT", 54320)
-	user := envOr("DATABASE_USER", "teslamate")
-	pass := envOr("DATABASE_PASS", "secret")
-	name := envOr("DATABASE_NAME", "teslamate")
+//
+// Connection target / credentials are NEVER hard-coded — DATABASE_HOST,
+// DATABASE_USER, DATABASE_PASS, DATABASE_NAME must all be set or the
+// process refuses to start (fail fast, fail loud). Only tunables with
+// universally-safe defaults (port, sslmode, timeouts) keep defaults.
+func buildConnString() (string, error) {
+	var missing []string
+	must := func(key string) string {
+		v := os.Getenv(key)
+		if v == "" {
+			missing = append(missing, key)
+		}
+		return v
+	}
+
+	host := must("DATABASE_HOST")
+	user := must("DATABASE_USER")
+	pass := must("DATABASE_PASS")
+	name := must("DATABASE_NAME")
+
+	if len(missing) > 0 {
+		return "", fmt.Errorf(
+			"missing required environment variable(s): %s — "+
+				"set DATABASE_HOST / DATABASE_USER / DATABASE_PASS / DATABASE_NAME explicitly",
+			strings.Join(missing, ", "),
+		)
+	}
+
+	// Tunables with safe defaults — `5432` is the PostgreSQL default port
+	// and `disable` matches typical local-network / docker-network setups.
+	port := envInt("DATABASE_PORT", 5432)
 	sslmode := envOr("DATABASE_SSLMODE", "disable")
 
 	// PostgreSQL session-level timeouts (milliseconds) prevent runaway queries
 	// from hogging a pooled connection.
-	stmtTimeoutMs := envInt("DATABASE_STMT_TIMEOUT_MS", 15000)        // 15s default
-	idleTxTimeoutMs := envInt("DATABASE_IDLE_TX_TIMEOUT_MS", 30000)   // 30s
-	lockTimeoutMs := envInt("DATABASE_LOCK_TIMEOUT_MS", 5000)         // 5s
-	tcpKeepalivesIdle := envInt("DATABASE_TCP_KEEPALIVES_IDLE", 30)   // sec
+	stmtTimeoutMs := envInt("DATABASE_STMT_TIMEOUT_MS", 15000)     // 15s default
+	idleTxTimeoutMs := envInt("DATABASE_IDLE_TX_TIMEOUT_MS", 30000) // 30s
+	lockTimeoutMs := envInt("DATABASE_LOCK_TIMEOUT_MS", 5000)       // 5s
+	tcpKeepalivesIdle := envInt("DATABASE_TCP_KEEPALIVES_IDLE", 30) // sec
 
 	return fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s "+
@@ -147,13 +172,16 @@ func buildConnString() string {
 			"connect_timeout=5",
 		host, port, user, pass, name, sslmode,
 		stmtTimeoutMs, idleTxTimeoutMs, lockTimeoutMs, tcpKeepalivesIdle*1000,
-	)
+	), nil
 }
 
 // initDB builds a tuned pgxpool with prepared-statement cache, health checks,
 // jittered max-lifetime, and a brief warm-up.
 func initDB() error {
-	connString := buildConnString()
+	connString, err := buildConnString()
+	if err != nil {
+		return err
+	}
 
 	cfg, err := pgxpool.ParseConfig(connString)
 	if err != nil {
