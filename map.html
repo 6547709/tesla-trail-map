@@ -959,36 +959,85 @@
             }
 
             try {
-                // E9 — System emoji 🚗 marker (v2: side-view only).
+                // E9 — Per-vehicle marker (v3: side-view only, by car_id).
                 //
-                // Behaviour change vs v1:
-                //   v1 rotated the emoji -90° to point "up" (north). Apple /
-                //   Twemoji / Segoe 🚗 face LEFT natively, so a -90° rotation
-                //   actually puts the car head DOWN — confusing on a map.
-                //   v2 keeps the emoji in its native (side-view) orientation
-                //   and only flips it horizontally to follow east/west motion.
-                //   The car never tilts up/down — always reads as a real car
-                //   on a map road.
+                // Behaviour:
+                //   • car_id=1 → system emoji 🚗 (Apple/Segoe/Noto picks
+                //     the right glyph per platform).
+                //   • car_id=2 → inline Twemoji-styled blue SUV (🚙) so
+                //     the colour is consistent across platforms instead
+                //     of macOS's orange / Windows' black SUV glyph.
+                //   • Anything else (0 = "all cars", or future cars) →
+                //     falls back to the 🚗 emoji.
                 //
-                // The emoji defaults to facing LEFT (going west). When the
-                // marker's longitude is increasing (going east) we flip via
-                // CSS `scaleX(-1)` on the inner element. The wrapper class
-                // .car-direction-east toggles the transform.
-                //
-                // Glyph rendering depends on the OS:
-                //   • macOS / iOS  → Apple Color Emoji
-                //   • Windows      → Segoe UI Emoji
-                //   • Linux        → Noto Color Emoji (Twemoji-like)
-                const carSvg = `
-                    <svg class="tesla-car-icon" width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-                        <!-- soft ground shadow -->
-                        <ellipse cx="22" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.25)"/>
-                        <!-- emoji in its native side-view orientation (faces LEFT) -->
-                        <text x="22" y="30" text-anchor="middle"
-                              font-size="32"
-                              style="font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji', sans-serif;">🚗</text>
-                    </svg>
-                `;
+                // Both glyphs default to facing LEFT (west). The rAF
+                // direction loop below toggles `.car-direction-east`
+                // (CSS `scaleX(-1)`) when the marker's longitude is
+                // increasing — pure horizontal flip, never tilted up/down.
+                function buildCarSvg(carId) {
+                    if (carId === 2) {
+                        // Twemoji-flavoured blue SUV (1F699 stylised).
+                        // Faces LEFT; flat-vector, no licensed asset.
+                        return `
+                            <svg class="tesla-car-icon" width="48" height="44" viewBox="0 0 96 88" xmlns="http://www.w3.org/2000/svg">
+                                <!-- ground shadow -->
+                                <ellipse cx="48" cy="80" rx="36" ry="3" fill="rgba(0,0,0,0.22)"/>
+                                <!-- body lower (deeper blue, faces LEFT) -->
+                                <path d="M 4 56
+                                         Q 4 40 14 36
+                                         L 30 30
+                                         Q 38 22 50 22
+                                         L 78 22
+                                         Q 88 22 88 32
+                                         L 92 56
+                                         Q 92 64 84 64
+                                         L 12 64
+                                         Q 4 64 4 56 Z"
+                                      fill="#3b82f6" stroke="#1e3a8a" stroke-width="1.5"/>
+                                <!-- body upper highlight -->
+                                <path d="M 30 30 Q 38 22 50 22 L 78 22
+                                         Q 88 22 88 32 L 86 36 L 32 36 Z"
+                                      fill="#60a5fa"/>
+                                <!-- windshield -->
+                                <path d="M 32 36 Q 40 28 50 28 L 76 28
+                                         Q 82 28 84 36 Z"
+                                      fill="#1f2937"/>
+                                <!-- side window split -->
+                                <line x1="58" y1="29" x2="58" y2="36"
+                                      stroke="#3b82f6" stroke-width="1.6"/>
+                                <!-- headlight (front = left) -->
+                                <rect x="6" y="46" width="6" height="6" rx="1.2"
+                                      fill="#fff8c5"/>
+                                <!-- door cut -->
+                                <line x1="50" y1="38" x2="50" y2="62"
+                                      stroke="#1e3a8a" stroke-width="1" opacity="0.5"/>
+                                <!-- wheels -->
+                                <circle cx="22" cy="66" r="9" fill="#111827"/>
+                                <circle cx="22" cy="66" r="4" fill="#4b5563"/>
+                                <circle cx="74" cy="66" r="9" fill="#111827"/>
+                                <circle cx="74" cy="66" r="4" fill="#4b5563"/>
+                                <!-- taillight (rear = right) -->
+                                <rect x="86" y="46" width="4" height="6" rx="1"
+                                      fill="#ef4444"/>
+                            </svg>
+                        `;
+                    }
+                    // Default: system 🚗 emoji.
+                    return `
+                        <svg class="tesla-car-icon" width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+                            <ellipse cx="22" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.25)"/>
+                            <text x="22" y="30" text-anchor="middle"
+                                  font-size="32"
+                                  style="font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji', sans-serif;">🚗</text>
+                        </svg>
+                    `;
+                }
+                const carSvg = buildCarSvg(currentCarId);
+
+                // Icon size differs slightly per glyph so the SUV doesn't
+                // feel cramped — keep anchors centred.
+                const iconW = currentCarId === 2 ? 48 : 44;
+                const iconH = 44;
 
                 currentAnimation = L.motion.polyline(latlngs, {
                     color: "#E81E25",
@@ -1002,8 +1051,8 @@
                     showMarker: true,
                     icon: L.divIcon({
                         html: `<div class="car-marker-container car-direction-west">${carSvg}</div>`,
-                        iconSize: [44, 44],
-                        iconAnchor: [22, 22],
+                        iconSize: [iconW, iconH],
+                        iconAnchor: [iconW / 2, iconH / 2],
                         className: 'car-marker'
                     })
                 }).addTo(map);
