@@ -95,6 +95,160 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ---
 
+### 3. Docker Compose 部署（推荐用于长期运行）
+
+把以下内容保存为 `docker-compose.yml`，然后 `docker compose up -d` 一键起。
+
+#### 方式 A：独立部署（应用已自带连接到现有 TeslaMate 数据库）
+
+```yaml
+# docker-compose.yml
+services:
+  tesla-trail-map:
+    image: ghcr.io/6547709/tesla-trail-map:1.6
+    container_name: tesla-trail-map
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # ───── 必填（无默认值，少一个直接退出）─────
+      DATABASE_HOST: 192.168.66.200      # 改成你的 TeslaMate PG 地址
+      DATABASE_PORT: 54320               # TeslaMate 默认对外 54320
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}    # 走 .env 注入，不要明文写进 yml
+      DATABASE_NAME: teslamate
+      # ───── 可选 ─────
+      DATABASE_SSLMODE: disable
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+同目录下放一个 `.env` 文件保存敏感信息（**记得加进 `.gitignore`**）：
+
+```bash
+# .env
+DATABASE_PASS=your_real_password
+```
+
+启动：
+```bash
+docker compose pull            # 拉最新镜像
+docker compose up -d           # 后台运行
+docker compose logs -f         # 看日志
+docker compose ps              # 看健康状态
+docker compose down            # 停止 + 删除容器
+```
+
+#### 方式 B：与 TeslaMate 整合（共用同一个 compose）
+
+如果你还没部署 TeslaMate，可以一份 yml 把 TeslaMate + Postgres + Grafana + 本应用全起来：
+
+```yaml
+# docker-compose.yml — 完整 TeslaMate 套件 + Trail Map
+services:
+  teslamate:
+    image: teslamate/teslamate:latest
+    restart: unless-stopped
+    environment:
+      ENCRYPTION_KEY: ${TESLAMATE_ENCRYPTION_KEY}
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}
+      DATABASE_NAME: teslamate
+      DATABASE_HOST: database
+      MQTT_HOST: mosquitto
+    ports:
+      - "4000:4000"
+    cap_drop: [all]
+
+  database:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: teslamate
+      POSTGRES_PASSWORD: ${DATABASE_PASS}
+      POSTGRES_DB: teslamate
+    volumes:
+      - teslamate-db:/var/lib/postgresql/data
+
+  grafana:
+    image: teslamate/grafana:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}
+      DATABASE_NAME: teslamate
+      DATABASE_HOST: database
+    ports:
+      - "3000:3000"
+    volumes:
+      - teslamate-grafana-data:/var/lib/grafana
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    command: mosquitto -c /mosquitto-no-auth.conf
+    volumes:
+      - mosquitto-conf:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+
+  # ★ Trail Map（本项目）— 通过容器网络直连 database 服务
+  tesla-trail-map:
+    image: ghcr.io/6547709/tesla-trail-map:1.6
+    container_name: tesla-trail-map
+    restart: unless-stopped
+    depends_on:
+      - database
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_HOST: database          # docker 内网 DNS，无需 IP
+      DATABASE_PORT: 5432              # PG 容器内端口（不是 54320）
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}
+      DATABASE_NAME: teslamate
+      DATABASE_SSLMODE: disable
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  teslamate-db:
+  teslamate-grafana-data:
+  mosquitto-conf:
+  mosquitto-data:
+```
+
+对应的 `.env`：
+```bash
+# .env
+DATABASE_PASS=use_a_strong_one
+TESLAMATE_ENCRYPTION_KEY=use_another_strong_one
+```
+
+> ⚠️ **方式 A vs 方式 B 的关键区别**
+> - 方式 A 连**外部已有**的 TeslaMate 库，`DATABASE_HOST` 用 IP/域名、`DATABASE_PORT` 通常是 `54320`（TeslaMate 暴露到宿主机的端口）。
+> - 方式 B 在**同一 compose 网络**里，`DATABASE_HOST` 用 service 名 `database`、`DATABASE_PORT` 是 PG 容器**内**端口 `5432`。
+
+#### 升级镜像
+
+```bash
+docker compose pull tesla-trail-map
+docker compose up -d tesla-trail-map
+```
+
+容器内置 `HEALTHCHECK` 会调 `/health`，30 秒一次；`docker ps` 状态列会显示 `(healthy)`。
+
+---
+
 ## ⚙️ 完整配置项
 
 ### 必填（无默认值，缺任一启动失败）

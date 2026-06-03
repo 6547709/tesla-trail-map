@@ -96,6 +96,160 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ---
 
+### Docker Compose (recommended for long-running setups)
+
+Save the file below as `docker-compose.yml`, then `docker compose up -d`.
+
+#### Mode A — standalone (connects to an existing TeslaMate DB)
+
+```yaml
+# docker-compose.yml
+services:
+  tesla-trail-map:
+    image: ghcr.io/6547709/tesla-trail-map:1.6
+    container_name: tesla-trail-map
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # ───── required (no defaults — startup aborts if any is missing) ─────
+      DATABASE_HOST: 192.168.66.200      # your TeslaMate PG host
+      DATABASE_PORT: 54320               # default exposed port
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}    # injected from .env, never hard-coded
+      DATABASE_NAME: teslamate
+      # ───── optional ─────
+      DATABASE_SSLMODE: disable
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+Put secrets in a sibling `.env` file (**add it to `.gitignore`**):
+
+```bash
+# .env
+DATABASE_PASS=your_real_password
+```
+
+Operate:
+```bash
+docker compose pull            # pull latest image
+docker compose up -d           # start in background
+docker compose logs -f         # tail logs
+docker compose ps              # show health
+docker compose down            # stop & remove
+```
+
+#### Mode B — full TeslaMate stack in one compose
+
+If you don't have TeslaMate running yet, this brings up TeslaMate + Postgres + Grafana + this app together:
+
+```yaml
+# docker-compose.yml — full TeslaMate stack + Trail Map
+services:
+  teslamate:
+    image: teslamate/teslamate:latest
+    restart: unless-stopped
+    environment:
+      ENCRYPTION_KEY: ${TESLAMATE_ENCRYPTION_KEY}
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}
+      DATABASE_NAME: teslamate
+      DATABASE_HOST: database
+      MQTT_HOST: mosquitto
+    ports:
+      - "4000:4000"
+    cap_drop: [all]
+
+  database:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: teslamate
+      POSTGRES_PASSWORD: ${DATABASE_PASS}
+      POSTGRES_DB: teslamate
+    volumes:
+      - teslamate-db:/var/lib/postgresql/data
+
+  grafana:
+    image: teslamate/grafana:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}
+      DATABASE_NAME: teslamate
+      DATABASE_HOST: database
+    ports:
+      - "3000:3000"
+    volumes:
+      - teslamate-grafana-data:/var/lib/grafana
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    command: mosquitto -c /mosquitto-no-auth.conf
+    volumes:
+      - mosquitto-conf:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+
+  # ★ Trail Map (this project) — connects directly to the database service
+  tesla-trail-map:
+    image: ghcr.io/6547709/tesla-trail-map:1.6
+    container_name: tesla-trail-map
+    restart: unless-stopped
+    depends_on:
+      - database
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_HOST: database          # docker network DNS, no IP needed
+      DATABASE_PORT: 5432              # PG container's internal port (not 54320)
+      DATABASE_USER: teslamate
+      DATABASE_PASS: ${DATABASE_PASS}
+      DATABASE_NAME: teslamate
+      DATABASE_SSLMODE: disable
+      TZ: Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  teslamate-db:
+  teslamate-grafana-data:
+  mosquitto-conf:
+  mosquitto-data:
+```
+
+Matching `.env`:
+```bash
+# .env
+DATABASE_PASS=use_a_strong_one
+TESLAMATE_ENCRYPTION_KEY=use_another_strong_one
+```
+
+> ⚠️ **Mode A vs Mode B**
+> - Mode A connects to an **external** TeslaMate DB — `DATABASE_HOST` is an IP/hostname, `DATABASE_PORT` is usually `54320` (TeslaMate's host-exposed port).
+> - Mode B lives in the **same compose network** — `DATABASE_HOST` is the service name `database`, `DATABASE_PORT` is PG's **internal** `5432`.
+
+#### Upgrading
+
+```bash
+docker compose pull tesla-trail-map
+docker compose up -d tesla-trail-map
+```
+
+The container ships with a `HEALTHCHECK` calling `/health` every 30s; `docker ps` will show `(healthy)` once steady.
+
+---
+
 ## ⚙️ Configuration
 
 ### Required (no defaults — startup aborts if any is missing)
