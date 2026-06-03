@@ -9,6 +9,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ### 🇨🇳 中文
 
+#### 修复 / 加固（v1.6 后续 patch，同 tag）
+- **🔴 B17 高危**：`/trips?max_points=0&car_id=N>0` 触发 PG `SQLSTATE 42P18`（占位符 `$3` 类型推断失败）→ 修复：V1 / V2 分支独立计算 carCond 占位符索引（V1 用 `$3`、V2 用 `$4`）。
+- **🟡 B18**：`/cars` 失败时透传 DB error → 改成与 `/trips` 一致的 `{"message":"Failed to fetch vehicle list"}`。
+- **🟢 B19**：客户端中断打 ERROR 日志噪声 → 降级为 INFO，并对 `/trips` handler 返回 `499 client closed request`（不再写 body）。
+- **🟢 B20**：所有路由加 Cache-Control。`/version` `public,max-age=300`、`/cars` `private,max-age=60`、`/trips` `/health` `no-store`。
+- **🟢 B21**：新增 stdlib 实现的 gzip 中间件（无新依赖），`Accept-Encoding: gzip` 时启用，**压缩率 ~88%**（1.6 MB → 186 KB）。`gzip.BestSpeed` + `sync.Pool` writer 复用。
+- **🟢 B22**：所有 GET 路由同步注册 HEAD（gin 不自动），让 `curl -I`、K8s 健康探针、uptime 监控都能正常工作。
+- **🟢 B23**：新增 graceful shutdown — 监听 SIGTERM/SIGINT，给进行中请求 15 秒收尾，然后 `pool.Close()` 干净退出。Docker/K8s 终止时不再丢请求。
+- **🟢 B27**：慢查询阈值 500ms → 1500ms（避开真实库 BRIN-only schema 在 600-1200ms 的常态）。
+- HTTP server 加 `ReadHeaderTimeout: 5s` 防 Slowloris。
+
+### 🇬🇧 English
+
+#### Fixed / Hardened (v1.6 patch, same tag)
+- **🔴 B17 critical**: `/trips?max_points=0&car_id=N>0` triggered PG `SQLSTATE 42P18` (parameter `$3` type inference failed) → fix: V1 and V2 branches now compute the carCond placeholder index independently (V1 uses `$3`, V2 uses `$4`).
+- **🟡 B18**: `/cars` leaked the raw DB error on failure → now returns `{"message":"Failed to fetch vehicle list"}` consistent with `/trips`.
+- **🟢 B19**: Client cancellations were spamming ERROR logs → downgraded to INFO; `/trips` handler now returns `499 client closed request` with no body.
+- **🟢 B20**: Cache-Control headers everywhere. `/version` `public,max-age=300`, `/cars` `private,max-age=60`, `/trips` and `/health` `no-store`.
+- **🟢 B21**: Added a stdlib gzip middleware (no new deps). Activates on `Accept-Encoding: gzip`; **~88% compression** (1.6 MB → 186 KB) on a typical 7-day window. `gzip.BestSpeed` + `sync.Pool` writer reuse.
+- **🟢 B22**: Every GET route is mirrored as HEAD (gin doesn't auto-mirror) so `curl -I`, K8s probes, and uptime monitors all return 200.
+- **🟢 B23**: Graceful shutdown — listen on SIGTERM/SIGINT, drain in-flight requests for up to 15 seconds, then `pool.Close()` cleanly. Docker/K8s terminations no longer drop requests.
+- **🟢 B27**: Slow-query threshold 500ms → 1500ms (real-world BRIN-only schema sits at 600-1200ms baseline).
+- HTTP server now sets `ReadHeaderTimeout: 5s` (Slowloris guard).
+
+### 🇨🇳 中文 (v1.6 主版本)
+
 #### 修改（Changed）
 - **🚗 全新车辆动画图标**：替换为系统原生 emoji 🚗，跨平台原生渲染
   - macOS / iOS → Apple Color Emoji（圆润红车）

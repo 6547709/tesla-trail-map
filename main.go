@@ -1,15 +1,20 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -253,7 +258,10 @@ func initDB() error {
 //
 // carID == 0 means "all cars" (back-compat); otherwise filter by drives.car_id.
 func getTripsWithPositions(ctx context.Context, startDate, endDate string, carID, maxPointsPerDrive int) ([]DriveWithPositions, error) {
-	const slowThreshold = 500 * time.Millisecond
+	// B27 — bumped from 500ms to 1500ms after observing that real-world
+	// 1-2 day windows on the production DB sit in the 600-1200ms range
+	// (BRIN-only schema). 1.5s catches actual outliers without noise.
+	const slowThreshold = 1500 * time.Millisecond
 	t0 := time.Now()
 	logger.Info("trips query start",
 		"start_date", startDate, "end_date", endDate,
@@ -270,15 +278,20 @@ func getTripsWithPositions(ctx context.Context, startDate, endDate string, carID
 	// drives 200k+ times per row of positions. Validated in dbprobe7:
 	// without MATERIALIZED, car_id=2 (less-active car) takes 60s; with it,
 	// 1.5s — same plan as car_id=1.
+	//
+	// B17 fix: the placeholder index for car_id depends on the branch:
+	//   • V1 (no downsample) uses $1,$2          → carID is $3
+	//   • V2 (downsample)    uses $1,$2,$3       → carID is $4
+	// Previously carCond hard-coded "$4" which broke V1 with carID set
+	// (PG: SQLSTATE 42P18, "could not determine data type of parameter $3").
 	var query string
 	var args []any
 
-	carCond := ""
-	if carID > 0 {
-		carCond = "AND car_id = $4"
-	}
-
 	if maxPointsPerDrive > 0 {
+		carCond := ""
+		if carID > 0 {
+			carCond = "AND car_id = $4"
+		}
 		query = fmt.Sprintf(`
 WITH d AS MATERIALIZED (
   SELECT id FROM drives
@@ -299,6 +312,10 @@ WHERE rn %% GREATEST(1, total / $3::bigint) = 0
 ORDER BY drive_id, date`, carCond)
 		args = []any{startDate, endDate, int64(maxPointsPerDrive)}
 	} else {
+		carCond := ""
+		if carID > 0 {
+			carCond = "AND car_id = $3"
+		}
 		query = fmt.Sprintf(`
 WITH d AS MATERIALIZED (
   SELECT id FROM drives
@@ -318,6 +335,12 @@ ORDER BY p.drive_id, p.date`, carCond)
 
 	rows, err := dbPool.Query(qctx, query, args...)
 	if err != nil {
+		// B19 — client cancellation isn't a server-side error;
+		// downgrade to INFO so logs aren't polluted by every aborted refresh.
+		if errors.Is(err, context.Canceled) {
+			logger.Info("trips query canceled", "elapsed", time.Since(t0))
+			return nil, err
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, fmt.Errorf("query timeout after %s: %w", time.Since(t0), err)
 		}
@@ -349,6 +372,11 @@ ORDER BY p.drive_id, p.date`, carCond)
 		posCount++
 	}
 	if err := rows.Err(); err != nil {
+		// B19 — same downgrade for streaming-stage cancellations.
+		if errors.Is(err, context.Canceled) {
+			logger.Info("trips rows canceled", "elapsed", time.Since(t0))
+			return nil, err
+		}
 		return nil, fmt.Errorf("rows iter: %w", err)
 	}
 
@@ -401,6 +429,54 @@ func parseFlexibleTime(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unrecognised time format")
 }
 
+// ─── gzip middleware (B21) ────────────────────────────────────────────────
+//
+// A small, allocation-aware gzip middleware. Only triggers when:
+//   • client sent  Accept-Encoding: gzip
+//   • response is one of the JSON / HTML routes we know benefits from it
+//
+// Avoids pulling in gin-contrib/gzip — fewer deps for a 30-line helper.
+var gzipPool = sync.Pool{
+	New: func() any {
+		// BestSpeed: ~3× faster than DefaultCompression with only 5-10%
+		// less compression — perfect for hot JSON paths.
+		w, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+		return w
+	},
+}
+
+type gzipResponseWriter struct {
+	gin.ResponseWriter
+	gz *gzip.Writer
+}
+
+func (g *gzipResponseWriter) Write(p []byte) (int, error)        { return g.gz.Write(p) }
+func (g *gzipResponseWriter) WriteString(s string) (int, error)  { return g.gz.Write([]byte(s)) }
+
+// gzipMiddleware compresses responses ≥ 1 KB when the client supports gzip.
+// Skipped for clients that didn't ask for it, and for tiny payloads where
+// compression overhead would actually hurt.
+func gzipMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
+			c.Next()
+			return
+		}
+		gz := gzipPool.Get().(*gzip.Writer)
+		gz.Reset(c.Writer)
+		defer func() {
+			_ = gz.Close()
+			gzipPool.Put(gz)
+		}()
+
+		c.Header("Content-Encoding", "gzip")
+		c.Header("Vary", "Accept-Encoding")
+		c.Writer.Header().Del("Content-Length") // length will change post-compression
+		c.Writer = &gzipResponseWriter{ResponseWriter: c.Writer, gz: gz}
+		c.Next()
+	}
+}
+
 func main() {
 	if err := initDB(); err != nil {
 		logger.Error("database initialization failed", "error", err)
@@ -429,7 +505,7 @@ func main() {
 
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -438,13 +514,30 @@ func main() {
 		c.Next()
 	})
 
+	// B21 — register gzip middleware globally; it self-skips when client
+	// didn't send Accept-Encoding: gzip.
+	r.Use(gzipMiddleware())
+
+	// B22 — auto-mirror every GET as HEAD so curl -I, K8s probes, and uptime
+	// monitors all work. We do this by registering HEAD handlers explicitly
+	// (gin doesn't auto-mirror). Note: gin's HTTP server already strips the
+	// body for HEAD responses on the standard library side.
 	r.LoadHTMLFiles("map.html")
 
-	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "map.html", nil)
-	})
+	// register registers a handler for both GET and HEAD on the same path.
+	register := func(path string, h gin.HandlerFunc) {
+		r.GET(path, h)
+		r.HEAD(path, h)
+	}
 
-	r.GET("/trips", func(c *gin.Context) {
+	// B22 — handler shared between GET / and HEAD /. gin doesn't auto-mirror
+	// GETs to HEADs, so K8s/uptime probes that issue HEAD would 404 otherwise.
+	rootHandler := func(c *gin.Context) {
+		c.HTML(http.StatusOK, "map.html", nil)
+	}
+	register("/", rootHandler)
+
+	register("/trips", func(c *gin.Context) {
 		startDate := c.Query("start_date")
 		endDate := c.Query("end_date")
 
@@ -502,6 +595,11 @@ func main() {
 
 		trips, err := getTripsWithPositions(c.Request.Context(), startDate, endDate, carID, maxPoints)
 		if err != nil {
+			// B19 — silently swallow client cancellations (no body, no log spam).
+			if errors.Is(err, context.Canceled) {
+				c.AbortWithStatus(499) // nginx-style "client closed request"
+				return
+			}
 			// B10 — never leak DB error / SQLSTATE / table name to the client.
 			logger.Error("query failed", "error", err)
 			status := http.StatusInternalServerError
@@ -514,25 +612,33 @@ func main() {
 			c.JSON(status, gin.H{"message": msg})
 			return
 		}
+		// B20 — trips data is point-in-time; clients should not cache it.
+		c.Header("Cache-Control", "no-store")
 		c.JSON(http.StatusOK, gin.H{"data": trips, "count": len(trips)})
 	})
 
 	// /cars — list all vehicles owned by this teslamate account.
 	// Used by the UI to render the car switcher (by display name, not by id).
-	r.GET("/cars", func(c *gin.Context) {
+	register("/cars", func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 		defer cancel()
 		cars, err := listCars(ctx)
 		if err != nil {
+			// B18 — never leak DB error / SQLSTATE / table name to the client;
+			// log it server-side, return only a friendly message (parity with /trips).
 			logger.Error("list cars failed", "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch vehicle list"})
 			return
 		}
+		// B20 — let UA cache car list briefly (rarely changes).
+		c.Header("Cache-Control", "private, max-age=60")
 		c.JSON(http.StatusOK, gin.H{"data": cars, "count": len(cars)})
 	})
 
 	// /health now also exposes pool stats — handy for ops dashboards.
-	r.GET("/health", func(c *gin.Context) {
+	register("/health", func(c *gin.Context) {
+		// B20 — health must never be cached by intermediaries.
+		c.Header("Cache-Control", "no-store")
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := dbPool.Ping(ctx); err != nil {
@@ -564,7 +670,9 @@ func main() {
 	// /version — tiny endpoint so deployers can verify which build is live.
 	// Also exposes the latest known release so the UI can show an "up to date"
 	// indicator without calling GitHub.
-	r.GET("/version", func(c *gin.Context) {
+	register("/version", func(c *gin.Context) {
+		// B20 — version doesn't change within a single build; allow brief cache.
+		c.Header("Cache-Control", "public, max-age=300")
 		c.JSON(http.StatusOK, gin.H{
 			"name":           "tesla-trail-map",
 			"version":        Version,
@@ -576,7 +684,33 @@ func main() {
 
 	port := envOr("PORT", "8080")
 	logger.Info("Tesla Track Map starting", "port", port, "version", Version)
-	if err := r.Run(":" + port); err != nil {
-		logger.Error("server failed to start", "error", err)
+
+	// B23 — graceful shutdown.
+	// In containers, Docker/K8s send SIGTERM and wait grace-period seconds
+	// before SIGKILL. Without this we drop in-flight requests and skip
+	// pool.Close() — both bad for ops.
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+	logger.Info("shutdown signal received, draining requests…")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("forced shutdown", "error", err)
+	}
+	logger.Info("server stopped cleanly")
 }
