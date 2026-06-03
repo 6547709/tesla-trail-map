@@ -5,6 +5,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6] – 2026-06-03
+
+### 🇨🇳 中文
+
+#### 修改（Changed）
+- **🚗 全新车辆动画图标**：替换为系统原生 emoji 🚗，跨平台原生渲染
+  - macOS / iOS → Apple Color Emoji（圆润红车）
+  - Windows → Segoe UI Emoji（扁平风）
+  - Linux / Android → Noto Color Emoji（Twemoji 风）
+  - 44×44 SVG 容器，包裹 `<text>🚗</text>` + 旋转 -90° 让 emoji 默认朝上；leaflet.motion 仍按轨迹切线旋转
+  - 删除上版手绘 SVG 共 113 行代码（净 +23/-118）
+- 头部完全去掉之前残缺的 Tesla 内联 SVG logo，标题更克制干净。
+
+#### UI 重设计（视觉系统升级）
+- 引入完整 **设计 token 系统**：ink 灰阶（50→900）、语义色、4 级 elevation 阴影、统一 radius / transition tokens。
+- 顶栏改为双行：标题 + 副标题 + 右推版本徽章；标题字号 22 → 18px。
+- 控件区从 `flex-wrap` 改成 **响应式 12 列 grid**（1100px → 2 列、640px → 1 列）。
+- 输入 / 分段控件统一 38px 高度、focus ring、hover tint；车辆数量徽章用 pill。
+- 状态浮窗：右上 → 左下角；改为 2 列 grid 对齐 label/value；加 pulsing 状态点；数字使用 tabular-num 字体。
+- Toast：圆角胶囊 + slide-in；smart-recommendation 卡片重做。
+- Leaflet zoom 与 attribution 自定义统一圆角 + 阴影。
+
+#### 修复 / 加固
+- 头部 Tesla SVG path 数据本身损坏，渲染只剩残形 → 直接删除。
+- 车辆切换器 `escapeHtml()` 防 XSS。
+
+#### 工程
+- map.html 整体净瘦身（v1.5 SVG 字符串体积大）。
+- 所有 17 个关键 DOM id 保留，JS 改动仅限 carSvg 常量。
+- `Version` / `LatestVersion` 常量同步升至 1.6；`/version` 端点自动反映。
+
+---
+
+### 🇬🇧 English
+
+#### Changed
+- **🚗 New car marker** — replaced the hand-drawn Tesla SVG with the system-native 🚗 emoji, rendered natively per platform:
+  - macOS / iOS → Apple Color Emoji (rounded red)
+  - Windows → Segoe UI Emoji (flat)
+  - Linux / Android → Noto Color Emoji (Twemoji-like)
+  - 44×44 SVG wraps `<text>🚗</text>` rotated -90° so it points up at rest; leaflet.motion still rotates along path tangent.
+  - Net diff: +23 / -118 lines (deleted the v1.5 hand-drawn SVG block).
+- Removed the broken inline Tesla logo from the header — the original SVG path data was malformed and only rendered a partial shape.
+
+#### UI redesign
+- Introduced a real **design-token system** (ink scale 50→900, semantic colors, 4-tier elevation, unified radius / transition).
+- Header → two-row layout: title + subtitle + right-aligned version pill; title 22 → 18px.
+- Controls: from wrap-flex to **responsive 12-col grid** (2-col at <1100px, 1-col on phones).
+- Inputs and segmented controls share a 38px height, focus ring, hover tint; car-switch buttons get pill counters.
+- Floating status panel: top-right → bottom-left, 2-col grid alignment, pulsing status dot, tabular-num figures.
+- Toasts: pill-shaped, slide-in; smart-recommendation card rewritten.
+- Leaflet zoom + attribution restyled to match the card system.
+
+#### Fixed / Hardened
+- Broken Tesla SVG logo removed from header.
+- Car switcher names go through `escapeHtml()` (XSS guard).
+
+#### Engineering
+- map.html slimmed (v1.5's hand-drawn SVG was sizeable).
+- All 17 key DOM IDs preserved; JS unchanged between v1.5 and v1.6 except the carSvg constant.
+- `Version` / `LatestVersion` constants bumped to 1.6 in lockstep; `/version` reflects automatically.
+
+---
+
 ## [v1.5] – 2026-06-02
 
 ### 🇨🇳 中文

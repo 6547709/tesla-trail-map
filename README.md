@@ -4,7 +4,7 @@
 
 > 配套 [TeslaMate](https://github.com/teslamate-org/teslamate) 使用的车辆行驶轨迹回放工具。
 > 后端 Go + Gin + pgx，前端 Leaflet + leaflet.motion。
-> 当前版本：**v1.5** · 见 [CHANGELOG](./CHANGELOG.md)
+> 当前版本：**v1.6** · 见 [CHANGELOG](./CHANGELOG.md)
 
 ---
 
@@ -57,7 +57,7 @@ go run .
 每次发 `vX.Y` tag，GitHub Actions 自动构建并推送 `linux/amd64` + `linux/arm64` 多架构镜像到 GHCR：
 
 ```bash
-docker pull ghcr.io/6547709/tesla-trail-map:1.5
+docker pull ghcr.io/6547709/tesla-trail-map:1.6
 # 也可以用 :latest（最新 tag 发布时同步更新）
 docker pull ghcr.io/6547709/tesla-trail-map:latest
 
@@ -67,7 +67,7 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
   -e DATABASE_USER=teslamate \
   -e DATABASE_PASS=your_password \
   -e DATABASE_NAME=teslamate \
-  ghcr.io/6547709/tesla-trail-map:1.5
+  ghcr.io/6547709/tesla-trail-map:1.6
 ```
 
 > Docker 会自动选你机器架构对应的层（x86_64 主机拿 amd64，Apple Silicon / 树莓派拿 arm64）。
@@ -75,14 +75,14 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
 #### 自己构建
 
 ```bash
-docker build -t tesla-trail-map:1.5 .
+docker build -t tesla-trail-map:1.6 .
 docker run -d --name tesla-trail-map -p 8080:8080 \
   -e DATABASE_HOST=host.docker.internal \
   -e DATABASE_PORT=5432 \
   -e DATABASE_USER=teslamate \
   -e DATABASE_PASS=your_password \
   -e DATABASE_NAME=teslamate \
-  tesla-trail-map:1.5
+  tesla-trail-map:1.6
 ```
 
 #### 本地多架构构建（可选）
@@ -90,7 +90,7 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
 ```bash
 docker buildx create --name multi --use 2>/dev/null || docker buildx use multi
 docker buildx build --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION=v1.5 -t tesla-trail-map:1.5 --load .
+  --build-arg VERSION=v1.6 -t tesla-trail-map:1.6 --load .
 ```
 
 ---
@@ -198,13 +198,13 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```json
 {
   "name": "tesla-trail-map",
-  "version": "1.5",
-  "latest_version": "1.5",
+  "version": "1.6",
+  "latest_version": "1.6",
   "is_latest": true,
   "go": "go1.25.x"
 }
 ```
-前端使用此接口比对当前版本与最新版本：相同则在 header 显示绿色 `v1.5 (latest)`，否则显示红色提示更新。
+前端使用此接口比对当前版本与最新版本：相同则在 header 显示绿色 `v1.6 (latest)`，否则显示红色提示更新。
 
 ---
 
