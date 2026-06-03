@@ -434,6 +434,19 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: transform 200ms ease;
+            transform-origin: center center;
+            will-change: transform;
+        }
+        /* Native emoji 🚗 faces LEFT — keep it that way when going west. */
+        .car-marker-container.car-direction-west {
+            transform: scaleX(1);
+        }
+        /* Mirror horizontally when moving east so the car faces RIGHT.
+           Important: we ONLY flip on the X axis — the marker never tilts
+           up/down, so the car always reads as a side-view on a road. */
+        .car-marker-container.car-direction-east {
+            transform: scaleX(-1);
         }
         .tesla-car-icon {
             filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
@@ -946,31 +959,34 @@
             }
 
             try {
-                // E9 — System emoji 🚗 marker.
+                // E9 — System emoji 🚗 marker (v2: side-view only).
                 //
-                // We render the OS-native car emoji inside an SVG so leaflet.motion
-                // can still rotate/translate it along the polyline.
+                // Behaviour change vs v1:
+                //   v1 rotated the emoji -90° to point "up" (north). Apple /
+                //   Twemoji / Segoe 🚗 face LEFT natively, so a -90° rotation
+                //   actually puts the car head DOWN — confusing on a map.
+                //   v2 keeps the emoji in its native (side-view) orientation
+                //   and only flips it horizontally to follow east/west motion.
+                //   The car never tilts up/down — always reads as a real car
+                //   on a map road.
                 //
-                // Note: the emoji glyph is intrinsically side-view with the car
-                // facing RIGHT. We rotate -90° so it faces UP (north) at rest;
-                // leaflet.motion then rotates the marker tangent to the path,
-                // making it look correct along the trail.
+                // The emoji defaults to facing LEFT (going west). When the
+                // marker's longitude is increasing (going east) we flip via
+                // CSS `scaleX(-1)` on the inner element. The wrapper class
+                // .car-direction-east toggles the transform.
                 //
                 // Glyph rendering depends on the OS:
-                //   • macOS / iOS  → Apple Color Emoji (the round, friendly one)
+                //   • macOS / iOS  → Apple Color Emoji
                 //   • Windows      → Segoe UI Emoji
                 //   • Linux        → Noto Color Emoji (Twemoji-like)
                 const carSvg = `
                     <svg class="tesla-car-icon" width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
                         <!-- soft ground shadow -->
                         <ellipse cx="22" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.25)"/>
-                        <!-- emoji rotated so it points "up" by default;
-                             Apple's 🚗 sits ~3px above baseline, so we nudge y -->
-                        <g transform="rotate(-90 22 22)">
-                            <text x="22" y="30" text-anchor="middle"
-                                  font-size="32"
-                                  style="font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji', sans-serif;">🚗</text>
-                        </g>
+                        <!-- emoji in its native side-view orientation (faces LEFT) -->
+                        <text x="22" y="30" text-anchor="middle"
+                              font-size="32"
+                              style="font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji', sans-serif;">🚗</text>
                     </svg>
                 `;
 
@@ -985,14 +1001,66 @@
                     removeOnEnd: false,
                     showMarker: true,
                     icon: L.divIcon({
-                        html: `<div class="car-marker-container">${carSvg}</div>`,
+                        html: `<div class="car-marker-container car-direction-west">${carSvg}</div>`,
                         iconSize: [44, 44],
                         iconAnchor: [22, 22],
                         className: 'car-marker'
-                    })    
+                    })
                 }).addTo(map);
 
+                // ─── Direction-flip loop ──────────────────────────────────
+                // leaflet.motion doesn't fire per-frame events, so we poll
+                // the marker's _latlng with rAF, compute the delta in
+                // longitude, and toggle the .car-direction-east class on
+                // the wrapper when motion direction flips.
+                //
+                // Tiny `epsilon` filters out sub-pixel jitter so the car
+                // doesn't flicker between LEFT/RIGHT on near-stationary
+                // stretches.
+                let lastLng = null;
+                let currentDir = 'west';   // matches the initial wrapper class
+                const epsilon = 1e-6;
+                let rafId = null;
+
+                const updateDirection = () => {
+                    if (!currentAnimation) return;
+                    // leaflet.motion exposes its rolling marker via getMarker()
+                    const marker = currentAnimation.getMarker
+                        ? currentAnimation.getMarker()
+                        : currentAnimation.__marker;
+                    if (!marker || typeof marker.getLatLng !== 'function') {
+                        rafId = requestAnimationFrame(updateDirection);
+                        return;
+                    }
+                    const lng = marker.getLatLng().lng;
+                    if (lastLng !== null) {
+                        const delta = lng - lastLng;
+                        let nextDir = currentDir;
+                        if (delta >  epsilon) nextDir = 'east';
+                        else if (delta < -epsilon) nextDir = 'west';
+
+                        if (nextDir !== currentDir) {
+                            const el = marker.getElement && marker.getElement();
+                            if (el) {
+                                const wrap = el.querySelector('.car-marker-container');
+                                if (wrap) {
+                                    wrap.classList.remove(
+                                        'car-direction-east',
+                                        'car-direction-west'
+                                    );
+                                    wrap.classList.add('car-direction-' + nextDir);
+                                }
+                            }
+                            currentDir = nextDir;
+                        }
+                    }
+                    lastLng = lng;
+                    rafId = requestAnimationFrame(updateDirection);
+                };
+                rafId = requestAnimationFrame(updateDirection);
+
                 currentAnimation.on('end', function() {
+                    if (rafId) cancelAnimationFrame(rafId);
                     showToast('Trail animation completed');
                     setStatus('connected', 'Done');
                 });
