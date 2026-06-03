@@ -21,3 +21,9 @@ tools/
 *.swo
 .idea/
 .vscode/
+
+# Secrets — keep local docker-compose env out of git.
+# `.env.example` IS committed as a template.
+.env
+.env.local
+.env.*.local

@@ -1,0 +1,65 @@
+# docker-compose.yml — Mode A (standalone)
+#
+# Connects this Trail Map app to an EXISTING TeslaMate PostgreSQL.
+# Replace DATABASE_HOST below with your TeslaMate host, and put the
+# real DATABASE_PASS in a sibling .env file (see .env.example).
+#
+# Quick start:
+#   cp .env.example .env          # then edit .env
+#   docker compose pull
+#   docker compose up -d
+#   open http://localhost:8080
+#
+# For the all-in-one TeslaMate stack (Postgres + Grafana + Mosquitto +
+# this app together) see README.md → "Docker Compose 部署 → 方式 B".
+
+services:
+  tesla-trail-map:
+    image: ghcr.io/6547709/tesla-trail-map:1.6
+    container_name: tesla-trail-map
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # ───── Required (no defaults — startup aborts if any is missing) ─────
+      DATABASE_HOST: ${DATABASE_HOST:-192.168.66.200}   # your TeslaMate PG host
+      DATABASE_PORT: ${DATABASE_PORT:-54320}            # TeslaMate's exposed port
+      DATABASE_USER: ${DATABASE_USER:-teslamate}
+      DATABASE_PASS: ${DATABASE_PASS:?DATABASE_PASS is required — set it in .env}
+      DATABASE_NAME: ${DATABASE_NAME:-teslamate}
+
+      # ───── Optional ─────
+      DATABASE_SSLMODE: ${DATABASE_SSLMODE:-disable}
+      TZ: ${TZ:-Asia/Shanghai}
+
+      # ───── Pool / timeout tunables (uncomment to override) ─────
+      # DATABASE_MAX_CONNS: 40
+      # DATABASE_MIN_CONNS: 8
+      # DATABASE_STMT_TIMEOUT_MS: 15000
+      # GIN_MODE: release
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # Drop all caps then re-add only what we need — defence in depth.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    # Modest resource limits — adjust for your hardware.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
