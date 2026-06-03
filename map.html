@@ -946,12 +946,88 @@
             }
 
             try {
-                // High-quality Tesla Car SVG (top view)
+                // Detailed Tesla Model 3 / Y top-view marker. Body has the
+                // signature one-piece glass roof, four wheel arches, and
+                // headlight + taillight strips. Hand-drawn — no licensed
+                // artwork. Car points "up" (north); leaflet.motion rotates
+                // it tangent to the polyline, so heading follows the path.
                 const carSvg = `
-                    <svg class="tesla-car-icon" width="24" height="48" viewBox="0 0 50 100" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M10,10 Q25,0 40,10 L45,30 Q50,60 45,90 L5,90 Q0,60 5,30 Z" fill="#E81E25" stroke="#fff" stroke-width="2"/>
-                        <rect x="12" y="15" width="26" height="20" rx="4" fill="rgba(0,0,0,0.7)"/>
-                        <rect x="12" y="55" width="26" height="25" rx="2" fill="rgba(0,0,0,0.7)"/>
+                    <svg class="tesla-car-icon" width="34" height="68" viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="tBody" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="#ED2A30"/>
+                                <stop offset="0.5" stop-color="#C9151B"/>
+                                <stop offset="1" stop-color="#8C0E12"/>
+                            </linearGradient>
+                            <linearGradient id="tGlass" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0"   stop-color="#3a4452"/>
+                                <stop offset="0.5" stop-color="#1a2030"/>
+                                <stop offset="1"   stop-color="#2a3340"/>
+                            </linearGradient>
+                            <radialGradient id="tHL" cx="0.5" cy="0.5" r="0.5">
+                                <stop offset="0"   stop-color="#fff8d6"/>
+                                <stop offset="0.6" stop-color="#fde6a3" stop-opacity="0.85"/>
+                                <stop offset="1"   stop-color="#fff8d6" stop-opacity="0"/>
+                            </radialGradient>
+                        </defs>
+
+                        <!-- soft ground shadow -->
+                        <ellipse cx="30" cy="115" rx="22" ry="3" fill="rgba(0,0,0,0.25)"/>
+
+                        <!-- headlight glow (front of car = top) -->
+                        <ellipse cx="30" cy="2" rx="22" ry="6" fill="url(#tHL)" opacity="0.9"/>
+
+                        <!-- body silhouette: smooth Tesla teardrop -->
+                        <path d="M30 4
+                                 C 14 4, 8 16, 8 30
+                                 L 7 70
+                                 C 7 88, 12 110, 22 114
+                                 L 38 114
+                                 C 48 110, 53 88, 53 70
+                                 L 52 30
+                                 C 52 16, 46 4, 30 4 Z"
+                              fill="url(#tBody)"
+                              stroke="#fff" stroke-width="1.2"/>
+
+                        <!-- one-piece panoramic glass (Model 3 / Y signature) -->
+                        <path d="M30 18
+                                 C 19 18, 14 26, 14 38
+                                 L 14 78
+                                 C 14 94, 18 102, 24 104
+                                 L 36 104
+                                 C 42 102, 46 94, 46 78
+                                 L 46 38
+                                 C 46 26, 41 18, 30 18 Z"
+                              fill="url(#tGlass)"
+                              stroke="rgba(255,255,255,0.18)" stroke-width="0.6"/>
+
+                        <!-- glass split (windshield top, B-pillar middle, rear glass) -->
+                        <line x1="14" y1="46" x2="46" y2="46" stroke="rgba(255,255,255,0.25)" stroke-width="0.6"/>
+                        <line x1="14" y1="78" x2="46" y2="78" stroke="rgba(255,255,255,0.25)" stroke-width="0.6"/>
+
+                        <!-- driver / passenger silhouettes -->
+                        <circle cx="22" cy="56" r="3.2" fill="rgba(255,255,255,0.18)"/>
+                        <circle cx="38" cy="56" r="3.2" fill="rgba(255,255,255,0.18)"/>
+
+                        <!-- side mirrors -->
+                        <ellipse cx="6"  cy="36" rx="2.6" ry="1.4" fill="#8C0E12" stroke="#fff" stroke-width="0.5"/>
+                        <ellipse cx="54" cy="36" rx="2.6" ry="1.4" fill="#8C0E12" stroke="#fff" stroke-width="0.5"/>
+
+                        <!-- wheels -->
+                        <rect x="3"  y="28" width="6" height="14" rx="2" fill="#1a1a1a"/>
+                        <rect x="51" y="28" width="6" height="14" rx="2" fill="#1a1a1a"/>
+                        <rect x="3"  y="80" width="6" height="14" rx="2" fill="#1a1a1a"/>
+                        <rect x="51" y="80" width="6" height="14" rx="2" fill="#1a1a1a"/>
+
+                        <!-- T logo on the hood -->
+                        <text x="30" y="14" text-anchor="middle"
+                              font-family="Helvetica, Arial, sans-serif"
+                              font-size="6" font-weight="900" fill="#fff"
+                              opacity="0.9">T</text>
+
+                        <!-- taillight strip (back = bottom) -->
+                        <rect x="12" y="108" width="36" height="2.5" rx="1.2"
+                              fill="#ff2230" opacity="0.85"/>
                     </svg>
                 `;
 
@@ -967,8 +1043,8 @@
                     showMarker: true,
                     icon: L.divIcon({
                         html: `<div class="car-marker-container">${carSvg}</div>`,
-                        iconSize: [24, 48],
-                        iconAnchor: [12, 24],
+                        iconSize: [34, 68],
+                        iconAnchor: [17, 34],
                         className: 'car-marker'
                     })    
                 }).addTo(map);
