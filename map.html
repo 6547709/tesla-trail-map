@@ -946,92 +946,126 @@
             }
 
             try {
-                // Clean Tesla Model Y top-view marker (v2).
+                // Tesla Model 3 top-view marker (v3) — true-to-scale rendition.
                 //
-                // Design notes:
-                //  - White body so it stands out from the red trail polyline.
-                //  - Subtle outer stroke (Tesla red) acts as a navigation
-                //    "you-are-here" focus ring.
-                //  - Single panoramic glass roof — the unmistakable Tesla cue.
-                //  - Compact 28×56 size keeps it readable without dominating.
-                //  - Hand-drawn vector — no licensed artwork.
+                // Hand-drawn from the actual Model 3 dimensions:
+                //   Length 4694mm × Width 1849mm  →  aspect ratio 2.54 : 1
+                //   viewBox 100 × 254 (10× scale, 1 unit = 1 cm)
+                //
+                // Model 3 signatures honored:
+                //   • Smooth low-slung silhouette, no protruding headlights
+                //   • One-piece black panoramic glass roof spanning the entire
+                //     greenhouse — pillars are hidden underneath
+                //   • Slim LED headlight clusters on either side of the hood
+                //   • Single horizontal taillight bar across the trunk
+                //   • Subtle hood crease + door cut lines
+                //
+                // Body uses a Pearl White multi-stop gradient. Stroke is a
+                // thin Tesla-red focus ring so the marker pops on a red trail.
                 const carSvg = `
-                    <svg class="tesla-car-icon" width="28" height="56" viewBox="0 0 56 112" xmlns="http://www.w3.org/2000/svg">
+                    <svg class="tesla-car-icon" width="32" height="80" viewBox="0 0 100 254" xmlns="http://www.w3.org/2000/svg">
                         <defs>
-                            <linearGradient id="tBodyW" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0"   stop-color="#ffffff"/>
-                                <stop offset="0.45" stop-color="#f5f6f8"/>
-                                <stop offset="1"   stop-color="#e6e8eb"/>
+                            <linearGradient id="m3Body" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0"   stop-color="#fafbfc"/>
+                                <stop offset="0.4" stop-color="#ffffff"/>
+                                <stop offset="0.7" stop-color="#eef0f3"/>
+                                <stop offset="1"   stop-color="#d4d8dd"/>
                             </linearGradient>
-                            <linearGradient id="tGlassW" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0"   stop-color="#2a3441"/>
-                                <stop offset="0.5" stop-color="#0f1620"/>
-                                <stop offset="1"   stop-color="#1c2632"/>
+                            <linearGradient id="m3Glass" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0"   stop-color="#1d242f"/>
+                                <stop offset="0.15" stop-color="#0a0e15"/>
+                                <stop offset="0.5"  stop-color="#000000"/>
+                                <stop offset="0.85" stop-color="#0a0e15"/>
+                                <stop offset="1"    stop-color="#1d242f"/>
                             </linearGradient>
-                            <filter id="tShadow" x="-30%" y="-10%" width="160%" height="120%">
-                                <feGaussianBlur stdDeviation="1.5" />
-                            </filter>
+                            <radialGradient id="m3Shine" cx="0.3" cy="0.2" r="0.5">
+                                <stop offset="0"   stop-color="#ffffff" stop-opacity="0.55"/>
+                                <stop offset="0.6" stop-color="#ffffff" stop-opacity="0.10"/>
+                                <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+                            </radialGradient>
                         </defs>
 
                         <!-- ground shadow -->
-                        <ellipse cx="28" cy="106" rx="20" ry="2.5"
-                                 fill="rgba(0,0,0,0.28)" filter="url(#tShadow)"/>
+                        <ellipse cx="50" cy="245" rx="40" ry="5" fill="rgba(0,0,0,0.30)"/>
 
-                        <!-- subtle red focus halo behind the car -->
-                        <ellipse cx="28" cy="56" rx="26" ry="48"
-                                 fill="rgba(232,30,37,0.10)"/>
+                        <!-- ============== BODY ==============
+                             Model 3 silhouette: rounded nose,
+                             gentle waist, fastback rear -->
+                        <path d="M 50 4
+                                 C 30 4, 18 14, 13 30
+                                 L 9 70
+                                 C 7 100, 6 150, 8 195
+                                 C 10 220, 18 240, 30 246
+                                 L 70 246
+                                 C 82 240, 90 220, 92 195
+                                 C 94 150, 93 100, 91 70
+                                 L 87 30
+                                 C 82 14, 70 4, 50 4 Z"
+                              fill="url(#m3Body)"
+                              stroke="#E81E25" stroke-width="1.5"/>
 
-                        <!-- body silhouette (Tesla teardrop, 2.5:1 ratio) -->
-                        <path d="M28 4
-                                 C 16 4, 9 12, 8 26
-                                 L 7 64
-                                 C 7 84, 12 102, 20 106
-                                 L 36 106
-                                 C 44 102, 49 84, 49 64
-                                 L 48 26
-                                 C 47 12, 40 4, 28 4 Z"
-                              fill="url(#tBodyW)"
-                              stroke="#E81E25" stroke-width="1.6"/>
+                        <!-- glossy highlight on front fender -->
+                        <path d="M 50 4 C 30 4, 18 14, 13 30 L 9 70
+                                 C 8 90, 7 110, 7 130 L 50 130 Z"
+                              fill="url(#m3Shine)" pointer-events="none"/>
 
-                        <!-- panoramic glass roof — single piece -->
-                        <path d="M28 18
-                                 C 19 18, 14 26, 14 38
-                                 L 14 78
-                                 C 14 90, 19 98, 24 100
-                                 L 32 100
-                                 C 37 98, 42 90, 42 78
-                                 L 42 38
-                                 C 42 26, 37 18, 28 18 Z"
-                              fill="url(#tGlassW)"/>
+                        <!-- ============== HEADLIGHTS (front = top) ==============
+                             Slim Model-3 LED clusters that wrap around the corners -->
+                        <path d="M 18 10 Q 26 6, 38 8 L 36 14 Q 26 11, 19 16 Z"
+                              fill="#1a1a1a" opacity="0.85"/>
+                        <path d="M 82 10 Q 74 6, 62 8 L 64 14 Q 74 11, 81 16 Z"
+                              fill="#1a1a1a" opacity="0.85"/>
+                        <!-- LED highlight in headlights -->
+                        <rect x="22" y="9"  width="14" height="2" rx="1" fill="#fff8d6" opacity="0.9"/>
+                        <rect x="64" y="9"  width="14" height="2" rx="1" fill="#fff8d6" opacity="0.9"/>
 
-                        <!-- glass highlight (top sheen) -->
-                        <path d="M18 30 Q 28 22, 38 30 L 36 38 Q 28 32, 20 38 Z"
-                              fill="rgba(255,255,255,0.12)"/>
+                        <!-- hood seam (subtle) -->
+                        <path d="M 14 28 Q 50 36, 86 28"
+                              stroke="rgba(0,0,0,0.18)" stroke-width="0.6" fill="none"/>
 
-                        <!-- B-pillar split -->
-                        <line x1="14" y1="60" x2="42" y2="60"
-                              stroke="rgba(255,255,255,0.10)" stroke-width="0.5"/>
+                        <!-- ============== PANORAMIC GLASS ROOF ==============
+                             The single most recognizable Model 3 cue -->
+                        <path d="M 50 38
+                                 C 32 38, 22 50, 20 70
+                                 L 17 145
+                                 C 17 175, 22 198, 32 210
+                                 L 68 210
+                                 C 78 198, 83 175, 83 145
+                                 L 80 70
+                                 C 78 50, 68 38, 50 38 Z"
+                              fill="url(#m3Glass)"/>
 
-                        <!-- side mirrors -->
-                        <circle cx="6"  cy="32" r="2.2" fill="#1a1a1a"/>
-                        <circle cx="50" cy="32" r="2.2" fill="#1a1a1a"/>
+                        <!-- glass top sheen / sky reflection -->
+                        <path d="M 26 60 Q 50 52, 74 60 L 70 78 Q 50 70, 30 78 Z"
+                              fill="rgba(255,255,255,0.10)"/>
 
-                        <!-- 4 wheels (rounded rect) -->
-                        <rect x="2"  y="24" width="6" height="14" rx="2.5" fill="#1a1a1a"/>
-                        <rect x="48" y="24" width="6" height="14" rx="2.5" fill="#1a1a1a"/>
-                        <rect x="2"  y="76" width="6" height="14" rx="2.5" fill="#1a1a1a"/>
-                        <rect x="48" y="76" width="6" height="14" rx="2.5" fill="#1a1a1a"/>
+                        <!-- door cut lines (hint of 4 doors) -->
+                        <line x1="14" y1="98"  x2="22" y2="98"  stroke="rgba(0,0,0,0.20)" stroke-width="0.5"/>
+                        <line x1="78" y1="98"  x2="86" y2="98"  stroke="rgba(0,0,0,0.20)" stroke-width="0.5"/>
+                        <line x1="14" y1="155" x2="22" y2="155" stroke="rgba(0,0,0,0.20)" stroke-width="0.5"/>
+                        <line x1="78" y1="155" x2="86" y2="155" stroke="rgba(0,0,0,0.20)" stroke-width="0.5"/>
 
-                        <!-- headlight strip (front) -->
-                        <rect x="14" y="6" width="28" height="2" rx="1"
-                              fill="#fff8d6" opacity="0.9"/>
+                        <!-- ============== SIDE MIRRORS ============== -->
+                        <ellipse cx="6"  cy="60" rx="3" ry="4.5" fill="#2a2a2a" stroke="#fff" stroke-width="0.6"/>
+                        <ellipse cx="94" cy="60" rx="3" ry="4.5" fill="#2a2a2a" stroke="#fff" stroke-width="0.6"/>
 
-                        <!-- taillight strip (rear) -->
-                        <rect x="14" y="103" width="28" height="2" rx="1"
+                        <!-- ============== WHEEL ARCHES ==============
+                             Slightly inset from body so they read as wheels -->
+                        <rect x="2"  y="58"  width="9" height="22" rx="3" fill="#15171a"/>
+                        <rect x="89" y="58"  width="9" height="22" rx="3" fill="#15171a"/>
+                        <rect x="2"  y="180" width="9" height="22" rx="3" fill="#15171a"/>
+                        <rect x="89" y="180" width="9" height="22" rx="3" fill="#15171a"/>
+                        <!-- subtle wheel rim highlight -->
+                        <circle cx="6.5" cy="69"  r="3" fill="#3a3d42"/>
+                        <circle cx="93.5" cy="69" r="3" fill="#3a3d42"/>
+                        <circle cx="6.5" cy="191" r="3" fill="#3a3d42"/>
+                        <circle cx="93.5" cy="191" r="3" fill="#3a3d42"/>
+
+                        <!-- ============== TAILLIGHT (rear = bottom) ==============
+                             Single horizontal LED bar across the trunk -->
+                        <path d="M 18 240 Q 50 244, 82 240 L 80 234 Q 50 238, 20 234 Z"
                               fill="#E81E25" opacity="0.95"/>
-
-                        <!-- direction arrow on the windshield (subtle, indicates "front") -->
-                        <path d="M28 24 L 32 30 L 24 30 Z" fill="rgba(255,255,255,0.4)"/>
+                        <rect x="22" y="237" width="56" height="1.5" fill="#ff5560" opacity="0.9"/>
                     </svg>
                 `;
 
@@ -1047,8 +1081,8 @@
                     showMarker: true,
                     icon: L.divIcon({
                         html: `<div class="car-marker-container">${carSvg}</div>`,
-                        iconSize: [28, 56],
-                        iconAnchor: [14, 28],
+                        iconSize: [32, 80],
+                        iconAnchor: [16, 40],
                         className: 'car-marker'
                     })    
                 }).addTo(map);
