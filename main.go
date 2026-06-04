@@ -28,13 +28,13 @@ var (
 )
 
 // Version is the public release tag of this build. Bumped in lockstep with
-// CHANGELOG.md and the git tag (e.g. v1.6.2).
-const Version = "1.6.2"
+// CHANGELOG.md and the git tag (e.g. v1.6.3).
+const Version = "1.6.3"
 
 // LatestVersion is the latest released version this build is aware of.
 // Kept equal to Version on every release so /version can flag itself as
 // "up to date" without needing to call out to GitHub.
-const LatestVersion = "1.6.2"
+const LatestVersion = "1.6.3"
 
 type Position struct {
 	Latitude  float64 `json:"latitude"`

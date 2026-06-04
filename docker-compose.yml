@@ -15,7 +15,7 @@
 
 services:
   tesla-trail-map:
-    image: ghcr.io/6547709/tesla-trail-map:1.6.2
+    image: ghcr.io/6547709/tesla-trail-map:1.6.3
     container_name: tesla-trail-map
     restart: unless-stopped
     ports:

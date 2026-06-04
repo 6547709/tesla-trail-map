@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Trail Map v1.6.2</title>
+    <title>TeslaMate Trail Map v1.6.3</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* ============================================================
-           Tesla Trail Map — UI v1.6.2 (refined)
+           Tesla Trail Map — UI v1.6.3 (refined)
            Design tokens & elevation system
            ============================================================ */
         :root {
@@ -501,7 +501,7 @@
                     TeslaMate Trail Map
                     <span class="header-subtitle">Drive trail playback</span>
                 </h1>
-                <span id="appVersion" class="app-version" title="Current build: v1.6.2 (latest)">v1.6.2</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.6.3 (latest)">v1.6.3</span>
             </div>
             <div class="controls">
                 <div class="control-group">
@@ -562,7 +562,7 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Version</span>
-                    <span class="info-value" id="versionLabel">v1.6.2</span>
+                    <span class="info-value" id="versionLabel">v1.6.3</span>
                 </div>
             </div>
         </div>
@@ -610,8 +610,8 @@
 
         // App version — defaults match the build constant in main.go.
         // /version may overwrite these at runtime if the server reports otherwise.
-        const DEFAULT_VERSION = 'v1.6.2';
-        const DEFAULT_LATEST  = 'v1.6.2';
+        const DEFAULT_VERSION = 'v1.6.3';
+        const DEFAULT_LATEST  = 'v1.6.3';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -891,7 +891,7 @@
 
         // ─── App version badge ────────────────────────────────────────────
         // Renders the version pill in the header and the "Version" row in
-        // the info panel. Defaults to v1.6.2 (current). If /version reports a
+        // the info panel. Defaults to v1.6.3 (current). If /version reports a
         // newer LatestVersion, we mark this build as outdated.
         async function loadVersion() {
             const badge = document.getElementById('appVersion');
@@ -951,11 +951,9 @@
             }
         }
 
-        function moveCarMarkerAndPath(latlngs, duration) {
+        function moveCarMarkerAndPath(driveTracks, totalDuration) {
             // B28 — kill any prior direction-tracking rAF loop BEFORE we
-            // remove the layer. Otherwise the loop would tick once on
-            // a stale marker reference (harmless but noisy) before
-            // currentAnimation is swapped.
+            // remove the layer.
             if (directionRafId) {
                 cancelAnimationFrame(directionRafId);
                 directionRafId = null;
@@ -967,7 +965,7 @@
                 map.removeLayer(currentPolyline);
             }
 
-            if (latlngs.length === 0) {
+            if (!driveTracks || driveTracks.length === 0) {
                 showToast('No trail data found', true);
                 return;
             }
@@ -1052,23 +1050,83 @@
                 // feel cramped — keep anchors centred.
                 const iconW = currentCarId === 2 ? 48 : 44;
                 const iconH = 44;
+                const carIcon = L.divIcon({
+                    html: `<div class="car-marker-container car-direction-west">${carSvg}</div>`,
+                    iconSize: [iconW, iconH],
+                    iconAnchor: [iconW / 2, iconH / 2],
+                    className: 'car-marker'
+                });
 
-                currentAnimation = L.motion.polyline(latlngs, {
-                    color: "#E81E25",
-                    weight: 5,
-                    opacity: 0.6
-                }, {
-                    auto: true,
-                    duration: duration
-                }, {
-                    removeOnEnd: false,
-                    showMarker: true,
-                    icon: L.divIcon({
-                        html: `<div class="car-marker-container car-direction-west">${carSvg}</div>`,
-                        iconSize: [iconW, iconH],
-                        iconAnchor: [iconW / 2, iconH / 2],
-                        className: 'car-marker'
-                    })
+                // ─────────────────────────────────────────────────────────
+                // B30 — Per-drive polylines, sequenced via L.motion.seq.
+                //
+                // Each drive becomes its own L.motion.polyline. We split
+                // the total animation budget proportionally to each
+                // drive's segment count so longer drives get more time.
+                // L.motion.seq plays them back-to-back without drawing
+                // straight lines between disconnected drives — solving
+                // the "frantic teleporting between trips" bug.
+                //
+                // We ALSO sort drives chronologically by the first point's
+                // timestamp before sequencing — the server returns them
+                // ordered by drive_id, which is monotonic at insert time
+                // but isn't guaranteed to match real-world chronology
+                // (deferred trips can land out of order).
+                // ─────────────────────────────────────────────────────────
+                const totalSegs = driveTracks.reduce(
+                    (s, t) => s + (t.length - 1), 0);
+
+                // Sort driveTracks by their first-point timestamp.
+                // We need the original `data` parallel array for the timestamp,
+                // so re-derive sortable list.
+                const sortedTracks = data
+                    .map(drive => ({
+                        first: drive.positions && drive.positions.length > 0
+                            ? new Date(drive.positions[0].date).getTime() : 0,
+                        track: (drive.positions || [])
+                            .slice()
+                            .sort((a, b) => new Date(a.date) - new Date(b.date))
+                            .map(p => (typeof p.latitude === 'number' &&
+                                       typeof p.longitude === 'number')
+                                ? [p.latitude, p.longitude]
+                                : null)
+                            .filter(p => p !== null)
+                    }))
+                    .filter(o => o.track.length >= 2)
+                    .sort((a, b) => a.first - b.first)
+                    .map(o => o.track);
+
+                const tracksToPlay = sortedTracks.length > 0 ? sortedTracks : driveTracks;
+
+                // Marker is shared on the LAST polyline only — leaflet.motion's
+                // .seq carries the marker through, so showing it once at the
+                // end of the chain is the cleanest way to keep ONE car icon
+                // moving across all drives.
+                const polylines = tracksToPlay.map((track, i) => {
+                    const segs = Math.max(1, track.length - 1);
+                    const dur  = Math.max(200, Math.round(totalDuration * (segs / totalSegs)));
+                    const isLast = (i === tracksToPlay.length - 1);
+                    return L.motion.polyline(track, {
+                        color: "#E81E25",
+                        weight: 5,
+                        opacity: 0.6
+                    }, {
+                        auto: false,                  // seq controls start
+                        duration: dur
+                    }, {
+                        // Each drive shows its own marker. All non-final
+                        // drives remove their marker on motion end so we
+                        // don't accumulate N stationary cars across the
+                        // map. The final drive keeps the marker visible
+                        // so the user sees where the trail ended.
+                        removeOnEnd: !isLast,
+                        showMarker: true,
+                        icon: carIcon
+                    });
+                });
+
+                currentAnimation = L.motion.seq(polylines, {
+                    auto: true
                 }).addTo(map);
 
                 // ─── Direction-flip loop ──────────────────────────────────
@@ -1086,10 +1144,25 @@
 
                 const updateDirection = () => {
                     if (!currentAnimation) return;
-                    // leaflet.motion exposes its rolling marker via getMarker()
-                    const marker = currentAnimation.getMarker
-                        ? currentAnimation.getMarker()
-                        : currentAnimation.__marker;
+                    // currentAnimation is now L.motion.seq — its rolling
+                    // marker lives on whichever child polyline is active.
+                    // Fall back to scanning every child if the seq hasn't
+                    // exposed _activeLayer yet (early frames).
+                    let marker = null;
+                    const active = currentAnimation._activeLayer;
+                    if (active && typeof active.getMarker === 'function') {
+                        marker = active.getMarker();
+                    } else if (typeof currentAnimation.getLayers === 'function') {
+                        for (const lyr of currentAnimation.getLayers()) {
+                            if (lyr && typeof lyr.getMarker === 'function') {
+                                const m = lyr.getMarker();
+                                if (m && typeof m.getLatLng === 'function') {
+                                    marker = m;
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     if (!marker || typeof marker.getLatLng !== 'function') {
                         directionRafId = requestAnimationFrame(updateDirection);
                         return;
@@ -1255,41 +1328,61 @@
                 const finalSpeed = getCurrentSpeed();
 
                 // ─────────────────────────────────────────────────────────
+                // B30 — Build a per-DRIVE list of polylines instead of one
+                //   flattened polyline.
+                //
+                // The previous code did `data.flatMap(...)` and fed the
+                // result as a single polyline to leaflet.motion. Problem:
+                // adjacent drives end in city A and start in city B with
+                // NO real path between them — but a flat polyline draws a
+                // straight line connecting them, so the car visibly
+                // teleports across town between drives. That was the
+                // "frantic painting" the user saw.
+                //
+                // Fix: keep drives separated. We build one [latlngs] array
+                // per drive (each filtered + chronologically sorted) and
+                // hand them to L.motion.seq, which animates them one
+                // after the other and DOES NOT draw the gaps.
+                // ─────────────────────────────────────────────────────────
+                const driveTracks = data
+                    .map(drive => (drive.positions || [])
+                        .slice()
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
+                        .map(pos => (typeof pos.latitude === 'number' &&
+                                     typeof pos.longitude === 'number')
+                            ? [pos.latitude, pos.longitude]
+                            : null)
+                        .filter(p => p !== null))
+                    .filter(track => track.length >= 2);  // drop singletons
+
+                if (driveTracks.length === 0) {
+                    showToast('No drivable segments after filtering', true);
+                    setLoading(false);
+                    return;
+                }
+                const totalSegs = driveTracks.reduce(
+                    (s, t) => s + (t.length - 1), 0);
+
                 // Animation duration MUST scale with content (B29 fix).
                 //
-                // The previous code did `finalDuration = 8000 / finalSpeed`
-                // which gave 8 seconds total for the ENTIRE polyline,
-                // regardless of point count. With a 24-hour "all cars"
-                // window that's typically ~2000 points after server-side
-                // downsampling — meaning the car had to cross 250 segments
-                // per second visually. That's the "frantic movement" the
-                // user reported. Smart-speed picking 3× on a long window
-                // then compounded it (8000/3 ≈ 2.6s for the whole trail).
-                //
-                // New formula:
-                //   baseMs = clamp(segments * MS_PER_SEG, MIN, MAX)
-                //
-                //   • MS_PER_SEG = 30ms — yields ~33 segments/sec at 1×,
-                //     which feels like a moderately-fast car cam.
-                //   • MIN = 5s   — short trips don't blink past instantly.
-                //   • MAX = 180s — multi-hour mega-windows top out at 3min
-                //                  at 1× (1min at 3×). User can still
-                //                  shorten via Custom speed up to 10×.
-                // ─────────────────────────────────────────────────────────
+                //   baseMs = clamp(totalSegments × 30ms, 5s, 180s)
+                //   • MS_PER_SEG = 30ms  → ~33 segs/sec at 1× (comfortable)
+                //   • MIN = 5s   — short trips don't blink past instantly
+                //   • MAX = 180s — multi-hour windows top out at 3min @ 1×
                 const MS_PER_SEG = 30;
                 const MIN_DUR    = 5000;
                 const MAX_DUR    = 180000;
-                const segments   = Math.max(1, latlngs.length - 1);
-                const baseMs     = Math.min(MAX_DUR, Math.max(MIN_DUR, segments * MS_PER_SEG));
+                const baseMs     = Math.min(MAX_DUR, Math.max(MIN_DUR, totalSegs * MS_PER_SEG));
                 const finalDuration = Math.max(500, baseMs / finalSpeed);
 
                 console.log('Animation plan:',
-                    'segments=', segments,
+                    'drives=', driveTracks.length,
+                    'totalSegments=', totalSegs,
                     'baseMs=', baseMs,
                     'speed=', finalSpeed + 'x',
                     'finalDuration=', finalDuration + 'ms');
 
-                moveCarMarkerAndPath(latlngs, finalDuration);
+                moveCarMarkerAndPath(driveTracks, finalDuration);
                 const secs = (finalDuration / 1000).toFixed(1);
                 showToast(`Playing ${data.length} trips · ${allPositions.length} points · ${secs}s @ ${finalSpeed}×`);
 

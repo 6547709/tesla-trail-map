@@ -5,6 +5,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.3] – 2026-06-04
+
+### 🇨🇳 中文
+
+#### 修复（Fixed）
+- **🔴 B30 — 多个 trip 之间被错画成跨城直线**：旧代码 `data.flatMap(d => d.positions)` 把 N 个 drive 的点合并成一个数组喂给 `L.motion.polyline`，导致每两个 drive 之间用一根直线连起来——视觉上小车像疯狂瞬移；用户截图里那条横跨成都市三个区的红色三角形，就是 drive A 终点到 drive B 起点的"假路径"。
+  - 实测确认：默认 24h all-cars = 7 drives，6 处跨 drive 跳跃，每处跨度 7-10 km。
+  - 修复：每个 drive 各自一条 `L.motion.polyline`，用 `L.motion.seq` 串接 → drive 之间断开，**不再画虚假直线**。
+  - 同时按动画总预算按段数 **比例分配** 每段 duration（长 drive 占更多时间），保持平均速度恒定。
+  - 顺手修：drives 在前端按"第一个点的时间戳"重新排序，避免 server 按 drive_id 返回时与真实时序不一致。
+  - 每个非末段 polyline `removeOnEnd:true`，避免 7 辆静止小车散在地图上。
+- **B29 (carryover)**：动画时长按内容缩放 `clamp(segs × 30ms, 5s, 180s)`，与 B30 协同。
+
+#### 工程
+- `Version` / `LatestVersion` → `1.6.3`；UI / README / docker-compose 同步。
+
+---
+
+### 🇬🇧 English
+
+#### Fixed
+- **🔴 B30 — Phantom inter-trip lines making the car appear to teleport**: previous code did `data.flatMap(d => d.positions)` and fed the result as one polyline. Adjacent drives end in city A and start in city B with no real path between — but a flat polyline connects them with a straight line, so the car visibly teleported across the map between trips. Confirmed against live data: default 24h all-cars window = 7 drives, 6 inter-drive jumps each 7-10 km wide.
+  - Fix: each drive becomes its own `L.motion.polyline`; we sequence them with `L.motion.seq`. The seq advances to the next polyline by jumping the marker, **not** by drawing a connector — gaps between drives are no longer painted.
+  - Per-drive duration is allocated proportionally to segment count, preserving roughly constant ground speed across the whole sequence.
+  - Drives are now ALSO re-sorted client-side by their first-point timestamp before sequencing — server returns by `drive_id` which can be out of chronological order if trips were ingested late.
+  - Non-final polylines use `removeOnEnd: true` so we don't accumulate 7 stationary cars scattered across the city.
+- **B29 carryover**: per-content animation duration `clamp(segs × 30ms, 5s, 180s)` works alongside B30.
+
+#### Engineering
+- `Version` / `LatestVersion` → `1.6.3`; UI / README / docker-compose synced.
+
+---
+
 ## [v1.6.2] – 2026-06-04
 
 ### 🇨🇳 中文
