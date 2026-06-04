@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.2] – 2026-06-04
+
+### 🇨🇳 中文
+
+#### 修复（Fixed）
+- **🔴 B29 — 默认参数下车辆"疯狂瞬移"**：旧代码 `finalDuration = 8000 / finalSpeed` 给整条 polyline 固定 8 秒，与点数无关。默认 24h "all cars" 窗口 = ~5000 个数据点 → 8000ms 走完意味着 **629 段/秒**，肉眼就是疯狂瞬移；smart-speed 自动选 3× 时更夸张（~1900 段/秒）。
+  - 修复：动画时长按内容缩放：`baseMs = clamp(segments × 30ms, 5s, 180s)`、`finalDuration = baseMs / speed`。
+  - 实测：默认 24h 窗口 5033 点 → **150.9s @ 1×（33 段/秒）**，视觉舒适。
+  - Toast 同步显示 `points · 总时长 · 速度倍率`，方便排查。
+
+#### 工程
+- `Version` / `LatestVersion` → `1.6.2`；UI 5 处版本字面 + README/docker-compose 镜像 tag 同步。
+
+---
+
+### 🇬🇧 English
+
+#### Fixed
+- **🔴 B29 — "Frantic teleporting" on default-window playback**: previous code did `finalDuration = 8000 / finalSpeed` — a fixed 8-second total animation no matter how many points were on the polyline. The default 24h "all cars" window has ~5000 points after server-side downsampling, so 8000ms total = **629 segments per second** of motion. Smart-speed picking 3× compounded it (~1900 seg/s). Looked like the car was teleporting across the map.
+  - Fix: duration now scales with content. `baseMs = clamp(segments × 30ms, 5s, 180s)`; `finalDuration = baseMs / speed`.
+  - Measured: 24h default window with 5033 points → **150.9s at 1× (33 segs/sec)** — comfortable car-cam feel.
+  - Toast now shows `points · total duration · speed` so users can sanity-check.
+
+#### Engineering
+- `Version` / `LatestVersion` → `1.6.2`; UI version literals (5 spots) and README / docker-compose image tags bumped.
+
+---
+
 ## [v1.6.1] – 2026-06-04
 
 ### 🇨🇳 中文
