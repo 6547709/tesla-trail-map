@@ -5,6 +5,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.5] – 2026-06-04
+
+### 🇨🇳 中文
+
+#### 修复（Fixed）
+- **🔴 B32 — v1.6.4 修好图标显示后又出现新问题：N 个静态小车，没有动画**：
+  - 现象（用户截图）：默认参数 Show Trail 后，地图上 7 辆红色小车静静地分布在 7 个 drive 的起点上，**没有任何动画也没有轨迹绘制**。
+  - 根因 1：`L.motion.seq` 把多个 child polyline `addTo(map)` 时，**每条 polyline 的 `__marker` 都被立即渲染**到自己的起点（即使 `auto:false`）。`showMarker:true` + `removeOnEnd:true` 这种组合在 seq 场景下行为不符合直觉。
+  - 根因 2：`L.motion.seq` 不会自动推进 child polylines — 必须显式 `motionStart()`。我们之前以为 `auto:true` 会推进 seq 的子项，实际只是 motion-polyline 自身的 auto 字段被吃掉。
+  - 修复（v1.6.5）：**完全抛弃 `motion.seq`**，改成自管模式：
+    1. 每条 drive 是 `L.motion.polyline` + **`showMarker: false`**（关键！）— 完全不让 motion 自己产生 marker。
+    2. 自己加一个 `L.marker(driveTracks[0][0], { icon: carIcon, ...zIndexOffset:1000 })` —— 全程**只有这一个**车图标。
+    3. 用 `'motion-ended'` 事件链式触发：第 N 条结束 → `setLatLng` 把车跳到 N+1 的起点 → `motionStart()` N+1。
+    4. rAF 循环每帧读 active polyline 的 `getLatLngs()` 末尾点，`carMarker.setLatLng(head)` 同步位置 + 计算 lng delta 决定左右翻转。
+    5. 用 `L.layerGroup([...polylines, carMarker])` 一次性 `addTo(map)` / `removeLayer`，清理简洁。
+  - 顺手修：事件名 `'motion-ended'`（不是 `motionended`，之前查源码确认）。
+
+#### 工程
+- `Version` / `LatestVersion` → `1.6.5`；UI / README / docker-compose 同步。
+
+---
+
+### 🇬🇧 English
+
+#### Fixed
+- **🔴 B32 — v1.6.4 fixed the missing-icon bug, but introduced a new one: N static cars, no animation**:
+  - Symptom (user screenshot): after Show Trail with default params, the map showed 7 red car icons frozen at the start of each drive. **No animation, no trail being drawn.**
+  - Root cause 1: when `L.motion.seq` adds child polylines to the map, **every child's `__marker` is rendered immediately at its starting point**, regardless of `auto:false`. The combination `showMarker:true` + `removeOnEnd:true` doesn't behave intuitively under seq.
+  - Root cause 2: `L.motion.seq` does NOT auto-advance its children — they must be explicitly `motionStart()`-ed. We were assuming `auto:true` would chain the children, but the option is consumed by the motion-polyline itself.
+  - Fix (v1.6.5): **drop `motion.seq` entirely**, run a manual chain:
+    1. Each drive is an `L.motion.polyline` with **`showMarker: false`** (critical!) — no motion-managed markers at all.
+    2. Add ONE plain `L.marker(driveTracks[0][0], { icon: carIcon, zIndexOffset: 1000, interactive: false })` — exactly one car visible at any time.
+    3. Chain with `'motion-ended'` event: when polyline N finishes, `setLatLng` the car to drive N+1's start, then call `polylines[N+1].motionStart()`. The marker JUMPS — no fake connector polyline.
+    4. rAF loop reads the active polyline's animated head via `getLatLngs()`, syncs `carMarker.setLatLng(head)` and computes longitude delta for the left/right flip.
+    5. Wrap polylines + marker in an `L.layerGroup` so `map.removeLayer(group)` cleans everything up.
+  - Also fixed: event name is `'motion-ended'` (not `motionended` — confirmed from minified source `L.Motion.Event.Ended = "motion-ended"`).
+
+#### Engineering
+- `Version` / `LatestVersion` → `1.6.5`; UI / README / docker-compose synced.
+
+---
+
 ## [v1.6.4] – 2026-06-04
 
 ### 🇨🇳 中文

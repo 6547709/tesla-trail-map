@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Trail Map v1.6.4</title>
+    <title>TeslaMate Trail Map v1.6.5</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* ============================================================
-           Tesla Trail Map — UI v1.6.4 (refined)
+           Tesla Trail Map — UI v1.6.5 (refined)
            Design tokens & elevation system
            ============================================================ */
         :root {
@@ -501,7 +501,7 @@
                     TeslaMate Trail Map
                     <span class="header-subtitle">Drive trail playback</span>
                 </h1>
-                <span id="appVersion" class="app-version" title="Current build: v1.6.4 (latest)">v1.6.4</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.6.5 (latest)">v1.6.5</span>
             </div>
             <div class="controls">
                 <div class="control-group">
@@ -562,7 +562,7 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Version</span>
-                    <span class="info-value" id="versionLabel">v1.6.4</span>
+                    <span class="info-value" id="versionLabel">v1.6.5</span>
                 </div>
             </div>
         </div>
@@ -610,8 +610,8 @@
 
         // App version — defaults match the build constant in main.go.
         // /version may overwrite these at runtime if the server reports otherwise.
-        const DEFAULT_VERSION = 'v1.6.4';
-        const DEFAULT_LATEST  = 'v1.6.4';
+        const DEFAULT_VERSION = 'v1.6.5';
+        const DEFAULT_LATEST  = 'v1.6.5';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -891,7 +891,7 @@
 
         // ─── App version badge ────────────────────────────────────────────
         // Renders the version pill in the header and the "Version" row in
-        // the info panel. Defaults to v1.6.4 (current). If /version reports a
+        // the info panel. Defaults to v1.6.5 (current). If /version reports a
         // newer LatestVersion, we mark this build as outdated.
         async function loadVersion() {
             const badge = document.getElementById('appVersion');
@@ -1058,124 +1058,140 @@
                 });
 
                 // ─────────────────────────────────────────────────────────
-                // B30 — Per-drive polylines, sequenced via L.motion.seq.
+                // B30/B32 — Per-drive polylines + manual chain.
                 //
-                // Each drive becomes its own L.motion.polyline. We split
-                // the total animation budget proportionally to each
-                // drive's segment count so longer drives get more time.
-                // L.motion.seq plays them back-to-back without drawing
-                // straight lines between disconnected drives — solving
-                // the "frantic teleporting between trips" bug.
+                // History of this code path:
+                //   v1.6.2: single flattened polyline → fake straight lines
+                //           between drives, car appeared to teleport (B30).
+                //   v1.6.3: switched to L.motion.seq with per-polyline
+                //           markers. Problem: when the seq adds its
+                //           children to the map, EVERY child polyline's
+                //           __marker is rendered immediately at its
+                //           starting point — leaving N static cars on
+                //           the map and no animation (B32).
+                //   v1.6.5 (this): drop motion.seq's marker management.
                 //
-                // B31 fix: callers MUST hand us already-sorted driveTracks
-                // (by first-point timestamp). The previous version tried
-                // to reach into a `data` variable that lives in
-                // fetchAndDrawData's scope — a textbook ReferenceError
-                // that the surrounding try/catch silently swallowed,
-                // which is why the marker disappeared in v1.6.3.
+                // Strategy:
+                //   • Each drive becomes its own L.motion.polyline with
+                //     showMarker:false — no auto-marker spam.
+                //   • We add ONE plain L.marker that we drive ourselves
+                //     by reading the active polyline's animated head
+                //     every frame.
+                //   • Polylines are chained: when polyline N fires
+                //     'motionended', we jump our marker to drive N+1's
+                //     start point and motionStart() polyline N+1.
+                //
+                // Net effect: exactly one car visible at any time, it
+                // jumps cleanly between drives (no fake connector line),
+                // and the trail fills in behind it.
                 // ─────────────────────────────────────────────────────────
                 const totalSegs = driveTracks.reduce(
                     (s, t) => s + (t.length - 1), 0);
 
-                // Each polyline owns its own marker. Non-final ones drop
-                // theirs on motion-end so we don't accumulate N stationary
-                // cars across the map. The final one keeps it so the user
-                // sees where the trail ended.
                 const polylines = driveTracks.map((track, i) => {
                     const segs = Math.max(1, track.length - 1);
                     const dur  = Math.max(200, Math.round(totalDuration * (segs / totalSegs)));
-                    const isLast = (i === driveTracks.length - 1);
                     return L.motion.polyline(track, {
                         color: "#E81E25",
                         weight: 5,
                         opacity: 0.6
                     }, {
-                        auto: false,                  // seq controls start
+                        auto: false,                // we control start
                         duration: dur
                     }, {
-                        removeOnEnd: !isLast,
-                        showMarker: true,
-                        icon: carIcon
+                        showMarker: false           // critical — no auto markers
                     });
                 });
 
-                currentAnimation = L.motion.seq(polylines, {
-                    auto: true
-                }).addTo(map);
+                // Our own marker — we move it manually. Initial pos = drive 0's start.
+                const carMarker = L.marker(driveTracks[0][0], {
+                    icon: carIcon,
+                    interactive: false,
+                    keyboard: false,
+                    zIndexOffset: 1000
+                });
 
-                // ─── Direction-flip loop ──────────────────────────────────
-                // leaflet.motion doesn't fire per-frame events, so we poll
-                // the marker's _latlng with rAF, compute the delta in
-                // longitude, and toggle the .car-direction-east class on
-                // the wrapper when motion direction flips.
+                // A layerGroup so cleanup is one map.removeLayer().
+                currentAnimation = L.layerGroup([...polylines, carMarker]).addTo(map);
+                // Tag the group so cleanup logic on next run can identify it.
+                currentAnimation._driveCount = polylines.length;
+
+                // ─── Manual chain: polyline N+1 starts when N ends ───
+                let activeIdx = 0;
+                let activePoly = polylines[0];
+
+                polylines.forEach((p, i) => {
+                    p.on('motion-ended', () => {
+                        const nextIdx = i + 1;
+                        if (nextIdx < polylines.length) {
+                            // Jump car to the next drive's start point —
+                            // this is the "no fake connector line" step:
+                            // we move the marker via setLatLng, NOT by
+                            // drawing a polyline between segments.
+                            const nextStart = driveTracks[nextIdx][0];
+                            carMarker.setLatLng(nextStart);
+                            activeIdx = nextIdx;
+                            activePoly = polylines[nextIdx];
+                            polylines[nextIdx].motionStart();
+                        } else {
+                            // Finale.
+                            activePoly = null;
+                            if (directionRafId) {
+                                cancelAnimationFrame(directionRafId);
+                                directionRafId = null;
+                            }
+                            showToast('Trail animation completed');
+                            setStatus('connected', 'Done');
+                        }
+                    });
+                });
+
+                // Kick off the first drive.
+                polylines[0].motionStart();
+
+                // ─── rAF loop: sync marker to active polyline's head + flip direction
                 //
-                // Tiny `epsilon` filters out sub-pixel jitter so the car
-                // doesn't flicker between LEFT/RIGHT on near-stationary
-                // stretches.
+                // leaflet.motion appends animated points to its polyline
+                // via setLatLngs(). We read the LAST appended point each
+                // frame — that's the current "head" of the moving line —
+                // and snap our marker to it. Same loop also computes the
+                // longitude delta to flip the car icon left/right.
                 let lastLng = null;
-                let currentDir = 'west';   // matches the initial wrapper class
+                let currentDir = 'west';
                 const epsilon = 1e-6;
 
-                const updateDirection = () => {
-                    if (!currentAnimation) return;
-                    // currentAnimation is now L.motion.seq — its rolling
-                    // marker lives on whichever child polyline is active.
-                    // Fall back to scanning every child if the seq hasn't
-                    // exposed _activeLayer yet (early frames).
-                    let marker = null;
-                    const active = currentAnimation._activeLayer;
-                    if (active && typeof active.getMarker === 'function') {
-                        marker = active.getMarker();
-                    } else if (typeof currentAnimation.getLayers === 'function') {
-                        for (const lyr of currentAnimation.getLayers()) {
-                            if (lyr && typeof lyr.getMarker === 'function') {
-                                const m = lyr.getMarker();
-                                if (m && typeof m.getLatLng === 'function') {
-                                    marker = m;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    if (!marker || typeof marker.getLatLng !== 'function') {
-                        directionRafId = requestAnimationFrame(updateDirection);
-                        return;
-                    }
-                    const lng = marker.getLatLng().lng;
-                    if (lastLng !== null) {
-                        const delta = lng - lastLng;
-                        let nextDir = currentDir;
-                        if (delta >  epsilon) nextDir = 'east';
-                        else if (delta < -epsilon) nextDir = 'west';
+                const tick = () => {
+                    if (!activePoly) return;  // animation ended
+                    const pts = activePoly.getLatLngs();
+                    if (pts && pts.length > 0) {
+                        const head = pts[pts.length - 1];
+                        carMarker.setLatLng(head);
 
-                        if (nextDir !== currentDir) {
-                            const el = marker.getElement && marker.getElement();
-                            if (el) {
-                                const wrap = el.querySelector('.car-marker-container');
-                                if (wrap) {
-                                    wrap.classList.remove(
-                                        'car-direction-east',
-                                        'car-direction-west'
-                                    );
-                                    wrap.classList.add('car-direction-' + nextDir);
+                        if (lastLng !== null) {
+                            const delta = head.lng - lastLng;
+                            let nextDir = currentDir;
+                            if      (delta >  epsilon) nextDir = 'east';
+                            else if (delta < -epsilon) nextDir = 'west';
+                            if (nextDir !== currentDir) {
+                                const el = carMarker.getElement && carMarker.getElement();
+                                if (el) {
+                                    const wrap = el.querySelector('.car-marker-container');
+                                    if (wrap) {
+                                        wrap.classList.remove(
+                                            'car-direction-east',
+                                            'car-direction-west'
+                                        );
+                                        wrap.classList.add('car-direction-' + nextDir);
+                                    }
                                 }
+                                currentDir = nextDir;
                             }
-                            currentDir = nextDir;
                         }
+                        lastLng = head.lng;
                     }
-                    lastLng = lng;
-                    directionRafId = requestAnimationFrame(updateDirection);
+                    directionRafId = requestAnimationFrame(tick);
                 };
-                directionRafId = requestAnimationFrame(updateDirection);
-
-                currentAnimation.on('end', function() {
-                    if (directionRafId) {
-                        cancelAnimationFrame(directionRafId);
-                        directionRafId = null;
-                    }
-                    showToast('Trail animation completed');
-                    setStatus('connected', 'Done');
-                });
+                directionRafId = requestAnimationFrame(tick);
 
             } catch (error) {
                 console.error('Animation failed:', error);
