@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Trail Map v1.6.3</title>
+    <title>TeslaMate Trail Map v1.6.4</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* ============================================================
-           Tesla Trail Map — UI v1.6.3 (refined)
+           Tesla Trail Map — UI v1.6.4 (refined)
            Design tokens & elevation system
            ============================================================ */
         :root {
@@ -501,7 +501,7 @@
                     TeslaMate Trail Map
                     <span class="header-subtitle">Drive trail playback</span>
                 </h1>
-                <span id="appVersion" class="app-version" title="Current build: v1.6.3 (latest)">v1.6.3</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.6.4 (latest)">v1.6.4</span>
             </div>
             <div class="controls">
                 <div class="control-group">
@@ -562,7 +562,7 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Version</span>
-                    <span class="info-value" id="versionLabel">v1.6.3</span>
+                    <span class="info-value" id="versionLabel">v1.6.4</span>
                 </div>
             </div>
         </div>
@@ -610,8 +610,8 @@
 
         // App version — defaults match the build constant in main.go.
         // /version may overwrite these at runtime if the server reports otherwise.
-        const DEFAULT_VERSION = 'v1.6.3';
-        const DEFAULT_LATEST  = 'v1.6.3';
+        const DEFAULT_VERSION = 'v1.6.4';
+        const DEFAULT_LATEST  = 'v1.6.4';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -891,7 +891,7 @@
 
         // ─── App version badge ────────────────────────────────────────────
         // Renders the version pill in the header and the "Version" row in
-        // the info panel. Defaults to v1.6.3 (current). If /version reports a
+        // the info panel. Defaults to v1.6.4 (current). If /version reports a
         // newer LatestVersion, we mark this build as outdated.
         async function loadVersion() {
             const badge = document.getElementById('appVersion');
@@ -1067,45 +1067,24 @@
                 // straight lines between disconnected drives — solving
                 // the "frantic teleporting between trips" bug.
                 //
-                // We ALSO sort drives chronologically by the first point's
-                // timestamp before sequencing — the server returns them
-                // ordered by drive_id, which is monotonic at insert time
-                // but isn't guaranteed to match real-world chronology
-                // (deferred trips can land out of order).
+                // B31 fix: callers MUST hand us already-sorted driveTracks
+                // (by first-point timestamp). The previous version tried
+                // to reach into a `data` variable that lives in
+                // fetchAndDrawData's scope — a textbook ReferenceError
+                // that the surrounding try/catch silently swallowed,
+                // which is why the marker disappeared in v1.6.3.
                 // ─────────────────────────────────────────────────────────
                 const totalSegs = driveTracks.reduce(
                     (s, t) => s + (t.length - 1), 0);
 
-                // Sort driveTracks by their first-point timestamp.
-                // We need the original `data` parallel array for the timestamp,
-                // so re-derive sortable list.
-                const sortedTracks = data
-                    .map(drive => ({
-                        first: drive.positions && drive.positions.length > 0
-                            ? new Date(drive.positions[0].date).getTime() : 0,
-                        track: (drive.positions || [])
-                            .slice()
-                            .sort((a, b) => new Date(a.date) - new Date(b.date))
-                            .map(p => (typeof p.latitude === 'number' &&
-                                       typeof p.longitude === 'number')
-                                ? [p.latitude, p.longitude]
-                                : null)
-                            .filter(p => p !== null)
-                    }))
-                    .filter(o => o.track.length >= 2)
-                    .sort((a, b) => a.first - b.first)
-                    .map(o => o.track);
-
-                const tracksToPlay = sortedTracks.length > 0 ? sortedTracks : driveTracks;
-
-                // Marker is shared on the LAST polyline only — leaflet.motion's
-                // .seq carries the marker through, so showing it once at the
-                // end of the chain is the cleanest way to keep ONE car icon
-                // moving across all drives.
-                const polylines = tracksToPlay.map((track, i) => {
+                // Each polyline owns its own marker. Non-final ones drop
+                // theirs on motion-end so we don't accumulate N stationary
+                // cars across the map. The final one keeps it so the user
+                // sees where the trail ended.
+                const polylines = driveTracks.map((track, i) => {
                     const segs = Math.max(1, track.length - 1);
                     const dur  = Math.max(200, Math.round(totalDuration * (segs / totalSegs)));
-                    const isLast = (i === tracksToPlay.length - 1);
+                    const isLast = (i === driveTracks.length - 1);
                     return L.motion.polyline(track, {
                         color: "#E81E25",
                         weight: 5,
@@ -1114,11 +1093,6 @@
                         auto: false,                  // seq controls start
                         duration: dur
                     }, {
-                        // Each drive shows its own marker. All non-final
-                        // drives remove their marker on motion end so we
-                        // don't accumulate N stationary cars across the
-                        // map. The final drive keeps the marker visible
-                        // so the user sees where the trail ended.
                         removeOnEnd: !isLast,
                         showMarker: true,
                         icon: carIcon
@@ -1343,17 +1317,31 @@
                 // per drive (each filtered + chronologically sorted) and
                 // hand them to L.motion.seq, which animates them one
                 // after the other and DOES NOT draw the gaps.
+                //
+                // We ALSO sort drives chronologically by the first point's
+                // timestamp before passing them on — the server returns
+                // them ordered by drive_id (monotonic at insert time, but
+                // not always real-world chronology if trips were ingested
+                // late).
                 // ─────────────────────────────────────────────────────────
                 const driveTracks = data
-                    .map(drive => (drive.positions || [])
-                        .slice()
-                        .sort((a, b) => new Date(a.date) - new Date(b.date))
-                        .map(pos => (typeof pos.latitude === 'number' &&
-                                     typeof pos.longitude === 'number')
-                            ? [pos.latitude, pos.longitude]
-                            : null)
-                        .filter(p => p !== null))
-                    .filter(track => track.length >= 2);  // drop singletons
+                    .map(drive => {
+                        const points = (drive.positions || [])
+                            .slice()
+                            .sort((a, b) => new Date(a.date) - new Date(b.date));
+                        return {
+                            first: points.length > 0 ? new Date(points[0].date).getTime() : 0,
+                            track: points
+                                .map(pos => (typeof pos.latitude === 'number' &&
+                                             typeof pos.longitude === 'number')
+                                    ? [pos.latitude, pos.longitude]
+                                    : null)
+                                .filter(p => p !== null)
+                        };
+                    })
+                    .filter(o => o.track.length >= 2)         // drop singletons
+                    .sort((a, b) => a.first - b.first)        // chronological
+                    .map(o => o.track);
 
                 if (driveTracks.length === 0) {
                     showToast('No drivable segments after filtering', true);

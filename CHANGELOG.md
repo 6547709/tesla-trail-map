@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.4] – 2026-06-04
+
+### 🇨🇳 中文
+
+#### 修复（Fixed）
+- **🔴 B31 — 车辆图标在 v1.6.3 之后消失**：v1.6.3 把"按时间戳排序 drives"的逻辑写在了 `moveCarMarkerAndPath()` 函数体里，但函数里引用了 `data` 变量——这个变量只存在于 `fetchAndDrawData()` 作用域。运行时抛 `ReferenceError: data is not defined`，被外层 `try/catch` 静默吞掉，导致整个 `L.motion.seq` 创建路径根本没执行 → 地图上没有任何车标。
+  - 修复：把"按时间戳排序"前移到 `fetchAndDrawData()`（`data` 在那里是合法的），让 `moveCarMarkerAndPath` 只接收已经排好序的 `driveTracks` 干净参数。
+  - 函数签名更明确，闭包不再泄漏 `data`。
+  - 注释里同步说明 v1.6.3 这个 ReferenceError 的原因，避免下次再踩。
+
+#### 工程
+- `Version` / `LatestVersion` → `1.6.4`；UI / README / docker-compose 同步。
+
+---
+
+### 🇬🇧 English
+
+#### Fixed
+- **🔴 B31 — Car icon disappeared after v1.6.3**: v1.6.3 moved the "sort drives by timestamp" logic into `moveCarMarkerAndPath()`'s body, but that function then referenced `data` — a variable that only exists in `fetchAndDrawData()`'s scope. At runtime it threw `ReferenceError: data is not defined`, was silently swallowed by the surrounding `try/catch`, and the entire `L.motion.seq` setup never ran. Result: the trail painted but no car icon appeared on the map.
+  - Fix: hoist the "sort drives by first-point timestamp" logic into `fetchAndDrawData()` (where `data` is valid). `moveCarMarkerAndPath` now receives a clean, already-sorted `driveTracks` parameter — no closure leaks.
+  - Comments now document the v1.6.3 ReferenceError so future hands don't re-introduce it.
+
+#### Engineering
+- `Version` / `LatestVersion` → `1.6.4`; UI / README / docker-compose synced.
+
+---
+
 ## [v1.6.3] – 2026-06-04
 
 ### 🇨🇳 中文
