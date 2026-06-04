@@ -584,6 +584,12 @@
         // Initialize map
         var map = L.map('map').setView([39.9042, 116.4074], 10);
 
+        // B28 — module-scoped rAF id so it survives across calls to
+        // moveCarMarkerAndPath. Without this, repeated 'Show Trail'
+        // clicks leak the previous direction-tracking loop, which
+        // would keep ticking forever (querying a dead marker).
+        let directionRafId = null;
+
         // Add tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -946,6 +952,14 @@
         }
 
         function moveCarMarkerAndPath(latlngs, duration) {
+            // B28 — kill any prior direction-tracking rAF loop BEFORE we
+            // remove the layer. Otherwise the loop would tick once on
+            // a stale marker reference (harmless but noisy) before
+            // currentAnimation is swapped.
+            if (directionRafId) {
+                cancelAnimationFrame(directionRafId);
+                directionRafId = null;
+            }
             if (currentAnimation) {
                 map.removeLayer(currentAnimation);
             }
@@ -1069,7 +1083,6 @@
                 let lastLng = null;
                 let currentDir = 'west';   // matches the initial wrapper class
                 const epsilon = 1e-6;
-                let rafId = null;
 
                 const updateDirection = () => {
                     if (!currentAnimation) return;
@@ -1078,7 +1091,7 @@
                         ? currentAnimation.getMarker()
                         : currentAnimation.__marker;
                     if (!marker || typeof marker.getLatLng !== 'function') {
-                        rafId = requestAnimationFrame(updateDirection);
+                        directionRafId = requestAnimationFrame(updateDirection);
                         return;
                     }
                     const lng = marker.getLatLng().lng;
@@ -1104,12 +1117,15 @@
                         }
                     }
                     lastLng = lng;
-                    rafId = requestAnimationFrame(updateDirection);
+                    directionRafId = requestAnimationFrame(updateDirection);
                 };
-                rafId = requestAnimationFrame(updateDirection);
+                directionRafId = requestAnimationFrame(updateDirection);
 
                 currentAnimation.on('end', function() {
-                    if (rafId) cancelAnimationFrame(rafId);
+                    if (directionRafId) {
+                        cancelAnimationFrame(directionRafId);
+                        directionRafId = null;
+                    }
                     showToast('Trail animation completed');
                     setStatus('connected', 'Done');
                 });
