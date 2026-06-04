@@ -4,7 +4,7 @@
 
 > A drive-trail playback tool that pairs with [TeslaMate](https://github.com/teslamate-org/teslamate).
 > Backend: Go + Gin + pgx. Frontend: Leaflet + leaflet.motion.
-> Current version: **v1.6** · see the [CHANGELOG](./CHANGELOG.md)
+> Current version: **v1.6.1** · see the [CHANGELOG](./CHANGELOG.md)
 
 ---
 
@@ -57,7 +57,7 @@ Every `vX.Y` tag triggers a GitHub Actions workflow that builds and pushes a
 multi-arch image (`linux/amd64` + `linux/arm64`) to GHCR:
 
 ```bash
-docker pull ghcr.io/6547709/tesla-trail-map:1.6
+docker pull ghcr.io/6547709/tesla-trail-map:1.6.1
 # or :latest (kept in sync with the most recent tag)
 docker pull ghcr.io/6547709/tesla-trail-map:latest
 
@@ -67,7 +67,7 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
   -e DATABASE_USER=teslamate \
   -e DATABASE_PASS=your_password \
   -e DATABASE_NAME=teslamate \
-  ghcr.io/6547709/tesla-trail-map:1.6
+  ghcr.io/6547709/tesla-trail-map:1.6.1
 ```
 
 > Docker picks the right layer automatically — amd64 hosts get amd64,
@@ -76,14 +76,14 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
 #### Build locally
 
 ```bash
-docker build -t tesla-trail-map:1.6 .
+docker build -t tesla-trail-map:1.6.1 .
 docker run -d --name tesla-trail-map -p 8080:8080 \
   -e DATABASE_HOST=host.docker.internal \
   -e DATABASE_PORT=5432 \
   -e DATABASE_USER=teslamate \
   -e DATABASE_PASS=your_password \
   -e DATABASE_NAME=teslamate \
-  tesla-trail-map:1.6
+  tesla-trail-map:1.6.1
 ```
 
 #### Build multi-arch locally (optional)
@@ -91,7 +91,7 @@ docker run -d --name tesla-trail-map -p 8080:8080 \
 ```bash
 docker buildx create --name multi --use 2>/dev/null || docker buildx use multi
 docker buildx build --platform linux/amd64,linux/arm64 \
-  --build-arg VERSION=v1.6 -t tesla-trail-map:1.6 --load .
+  --build-arg VERSION=v1.6.1 -t tesla-trail-map:1.6.1 --load .
 ```
 
 ---
@@ -106,7 +106,7 @@ Save the file below as `docker-compose.yml`, then `docker compose up -d`.
 # docker-compose.yml
 services:
   tesla-trail-map:
-    image: ghcr.io/6547709/tesla-trail-map:1.6
+    image: ghcr.io/6547709/tesla-trail-map:1.6.1
     container_name: tesla-trail-map
     restart: unless-stopped
     ports:
@@ -199,7 +199,7 @@ services:
 
   # ★ Trail Map (this project) — connects directly to the database service
   tesla-trail-map:
-    image: ghcr.io/6547709/tesla-trail-map:1.6
+    image: ghcr.io/6547709/tesla-trail-map:1.6.1
     container_name: tesla-trail-map
     restart: unless-stopped
     depends_on:
@@ -354,8 +354,8 @@ DB ping + pgxpool live stats:
 ```json
 {
   "name": "tesla-trail-map",
-  "version": "1.6",
-  "latest_version": "1.6",
+  "version": "1.6.1",
+  "latest_version": "1.6.1",
   "is_latest": true,
   "go": "go1.25.x"
 }

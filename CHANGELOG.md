@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.1] – 2026-06-04
+
+### 🇨🇳 中文
+
+#### 修复（Fixed）
+- **B28 — 前端 rAF 泄露**：`moveCarMarkerAndPath()` 内部 `let rafId` 是函数局部变量，每次重新点 *Show Trail* 或切车都新建闭包但未取消上一次。表现：旧 loop 在 stale marker 引用上 tick 1-2 帧（无报错但浪费 CPU + 制造日志噪音）。
+  - 修复：`directionRafId` 提升到 script 级；进入函数先 `cancelAnimationFrame` + 置 null；`on('end')` 同步清理。
+  - 验证：连续 30 次 Show Trail，DevTools Performance 始终只有一条 rAF loop 在跑。
+
+#### 工程
+- `Version` / `LatestVersion` 常量同步升至 `1.6.1`；`/version` 端点自动反映；UI header pill / status panel "Version" 行同步。
+- README / docker-compose.yml 中 docker tag 全部升至 `:1.6.1`。
+
+---
+
+### 🇬🇧 English
+
+#### Fixed
+- **B28 — Frontend rAF leak**: `moveCarMarkerAndPath()` declared `let rafId` as a function-local variable. Each subsequent *Show Trail* click or vehicle switch spawned a fresh closure and a fresh requestAnimationFrame loop without ever cancelling the previous one. The stale loop ticked 1-2 frames against a dead marker reference before short-circuiting — no error, but wasted CPU and added log noise.
+  - Fix: Hoisted `directionRafId` to script scope; cancel + null it on entry to `moveCarMarkerAndPath()`; `on('end')` cancels and nulls again.
+  - Verified: 30 consecutive *Show Trail* clicks → DevTools Performance shows exactly one rAF loop alive at any time.
+
+#### Engineering
+- `Version` / `LatestVersion` constants bumped to `1.6.1` in lockstep; `/version` reflects automatically; UI header pill and status-panel Version row stay in sync.
+- README and docker-compose.yml image tags bumped to `:1.6.1`.
+
+---
+
 ## [v1.6] – 2026-06-03
 
 ### 🇨🇳 中文
