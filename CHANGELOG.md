@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.6] – 2026-06-04
+
+### 🇨🇳 中文
+
+#### 修改（Changed）
+- **🟡 B33-A — 动画速度加快一倍**：用户反馈 v1.6.5 默认速度太慢。`MS_PER_SEG` 从 `30ms` 降到 `15ms`（约 67 段/秒 @ 1×）；`MIN/MAX` 上下限同步缩半为 `3s / 90s`。默认 24h ~5000 点窗口现在 ~75 秒走完（之前 150 秒）。
+- **🟢 B33-B — 去掉跟随小车的蓝色定位针**：v1.6.5 在 `motion.polyline` 第 4 个 `markerOptions` 参数里传了 `{showMarker:false}` —— 但只要这个参数为 truthy，leaflet.motion 的 `_initializeMarker()` 就会创建一个 `__marker`（默认蓝色 Leaflet pin），并在第一帧 `addTo(map)`。修复：**完全省略第 4 个参数**，让 `markerOptions` 保持 `undefined`，从源头阻止 `__marker` 创建。地图上现在只剩唯一的 `carMarker`（我们自管的红色车图标）。
+
+#### 工程
+- `Version` / `LatestVersion` → `1.6.6`；UI / README / docker-compose 同步。
+
+---
+
+### 🇬🇧 English
+
+#### Changed
+- **🟡 B33-A — Animation speed doubled**: user reported v1.6.5 felt sluggish at the default speed. `MS_PER_SEG` lowered from `30ms` to `15ms` (≈67 segments/sec at 1×); `MIN/MAX` floor/ceiling halved to `3s / 90s`. The default 24h ~5000-point window now plays in ~75 seconds (was 150 seconds).
+- **🟢 B33-B — Killed the stray blue Leaflet pin trailing the car**: v1.6.5 passed `{showMarker:false}` as the 4th `markerOptions` arg to `motion.polyline`. But leaflet.motion's `_initializeMarker()` creates a `__marker` whenever `markerOptions` is truthy — and `_drawMarker()` on the first animation frame `addTo(map)`s it (using the default blue Leaflet pin icon). Fix: **omit the 4th argument entirely**, leaving `markerOptions === undefined`, which prevents `__marker` from ever being constructed. The map now shows exactly one car icon (our self-managed `carMarker`).
+
+#### Engineering
+- `Version` / `LatestVersion` → `1.6.6`; UI / README / docker-compose synced.
+
+---
+
 ## [v1.6.5] – 2026-06-04
 
 ### 🇨🇳 中文

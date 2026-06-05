@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Trail Map v1.6.5</title>
+    <title>TeslaMate Trail Map v1.6.6</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* ============================================================
-           Tesla Trail Map — UI v1.6.5 (refined)
+           Tesla Trail Map — UI v1.6.6 (refined)
            Design tokens & elevation system
            ============================================================ */
         :root {
@@ -501,7 +501,7 @@
                     TeslaMate Trail Map
                     <span class="header-subtitle">Drive trail playback</span>
                 </h1>
-                <span id="appVersion" class="app-version" title="Current build: v1.6.5 (latest)">v1.6.5</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.6.6 (latest)">v1.6.6</span>
             </div>
             <div class="controls">
                 <div class="control-group">
@@ -562,7 +562,7 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Version</span>
-                    <span class="info-value" id="versionLabel">v1.6.5</span>
+                    <span class="info-value" id="versionLabel">v1.6.6</span>
                 </div>
             </div>
         </div>
@@ -610,8 +610,8 @@
 
         // App version — defaults match the build constant in main.go.
         // /version may overwrite these at runtime if the server reports otherwise.
-        const DEFAULT_VERSION = 'v1.6.5';
-        const DEFAULT_LATEST  = 'v1.6.5';
+        const DEFAULT_VERSION = 'v1.6.6';
+        const DEFAULT_LATEST  = 'v1.6.6';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -891,7 +891,7 @@
 
         // ─── App version badge ────────────────────────────────────────────
         // Renders the version pill in the header and the "Version" row in
-        // the info panel. Defaults to v1.6.5 (current). If /version reports a
+        // the info panel. Defaults to v1.6.6 (current). If /version reports a
         // newer LatestVersion, we mark this build as outdated.
         async function loadVersion() {
             const badge = document.getElementById('appVersion');
@@ -1091,6 +1091,16 @@
                 const polylines = driveTracks.map((track, i) => {
                     const segs = Math.max(1, track.length - 1);
                     const dur  = Math.max(200, Math.round(totalDuration * (segs / totalSegs)));
+                    // B33 — DELIBERATELY do NOT pass a 4th `markerOptions`
+                    // arg to L.motion.polyline. If we pass anything (even
+                    // `{showMarker:false}`), motion creates an internal
+                    // __marker with the default blue Leaflet pin icon and
+                    // its `_drawMarker()` logic adds that marker to the
+                    // map on the first animation frame (the user reported
+                    // "blue location pins following the car"). Omitting
+                    // the 4th arg keeps `this.markerOptions` undefined,
+                    // so __marker is never created — only our own car
+                    // L.marker is visible.
                     return L.motion.polyline(track, {
                         color: "#E81E25",
                         weight: 5,
@@ -1098,8 +1108,6 @@
                     }, {
                         auto: false,                // we control start
                         duration: dur
-                    }, {
-                        showMarker: false           // critical — no auto markers
                     });
                 });
 
@@ -1369,13 +1377,14 @@
 
                 // Animation duration MUST scale with content (B29 fix).
                 //
-                //   baseMs = clamp(totalSegments × 30ms, 5s, 180s)
-                //   • MS_PER_SEG = 30ms  → ~33 segs/sec at 1× (comfortable)
-                //   • MIN = 5s   — short trips don't blink past instantly
-                //   • MAX = 180s — multi-hour windows top out at 3min @ 1×
-                const MS_PER_SEG = 30;
-                const MIN_DUR    = 5000;
-                const MAX_DUR    = 180000;
+                //   baseMs = clamp(totalSegments × 15ms, 3s, 90s)
+                //   • MS_PER_SEG = 15ms  → ~67 segs/sec at 1× (B33 — 2× the
+                //     previous 30ms; user reported v1.6.5 felt sluggish).
+                //   • MIN = 3s   — short trips don't blink past instantly
+                //   • MAX = 90s  — multi-hour windows top out at 90s @ 1×
+                const MS_PER_SEG = 15;
+                const MIN_DUR    = 3000;
+                const MAX_DUR    = 90000;
                 const baseMs     = Math.min(MAX_DUR, Math.max(MIN_DUR, totalSegs * MS_PER_SEG));
                 const finalDuration = Math.max(500, baseMs / finalSpeed);
 
