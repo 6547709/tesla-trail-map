@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Trail Map v1.6.6</title>
+    <title>TeslaMate Trail Map v1.6.7</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* ============================================================
-           Tesla Trail Map — UI v1.6.6 (refined)
+           Tesla Trail Map — UI v1.6.7 (refined)
            Design tokens & elevation system
            ============================================================ */
         :root {
@@ -501,7 +501,7 @@
                     TeslaMate Trail Map
                     <span class="header-subtitle">Drive trail playback</span>
                 </h1>
-                <span id="appVersion" class="app-version" title="Current build: v1.6.6 (latest)">v1.6.6</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.6.7 (latest)">v1.6.7</span>
             </div>
             <div class="controls">
                 <div class="control-group">
@@ -521,9 +521,9 @@
                 <div class="control-group">
                     <label>Animation Speed</label>
                     <div class="speed-options">
-                        <button class="speed-btn" data-speed="0.5">0.5×</button>
                         <button class="speed-btn active" data-speed="1">1×</button>
                         <button class="speed-btn" data-speed="3">3×</button>
+                        <button class="speed-btn" data-speed="5">5×</button>
                         <button class="speed-btn" data-speed="custom">Custom</button>
                     </div>
                 </div>
@@ -562,7 +562,7 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Version</span>
-                    <span class="info-value" id="versionLabel">v1.6.6</span>
+                    <span class="info-value" id="versionLabel">v1.6.7</span>
                 </div>
             </div>
         </div>
@@ -572,7 +572,7 @@
     
     <div class="smart-recommendation-toast" id="smartRecommendationToast">
         <div id="recommendationMessage">
-            Long trip detected. Switch to 3x speed?
+            Long trip detected. Switch to 5x speed?
         </div>
         <div style="display: flex; gap: 10px;">
             <button class="recommendation-action-btn" onclick="applyRecommendation()">Apply</button>
@@ -589,6 +589,21 @@
         // clicks leak the previous direction-tracking loop, which
         // would keep ticking forever (querying a dead marker).
         let directionRafId = null;
+
+        // B-F3 — module-scoped toast timer ids so a new toast cancels
+        // the previous one's auto-dismiss. Without this, the stale
+        // setTimeout fires 0.1s into the new toast and hides it early.
+        let toastTimer = null;
+        let recommendationTimer = null;
+
+        // B-F4 — animation generation counter. Every call to
+        // moveCarMarkerAndPath bumps it; motion-ended handlers check
+        // that the current generation matches their captured value and
+        // early-return otherwise. This prevents stale callbacks from
+        // leaflet.motion's setTimeout firing on a polyline that's
+        // already been removed from the map (which would have called
+        // setLatLng on a stale marker and motionStart()'d an orphan).
+        let animGeneration = 0;
 
         // Add tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -610,8 +625,8 @@
 
         // App version — defaults match the build constant in main.go.
         // /version may overwrite these at runtime if the server reports otherwise.
-        const DEFAULT_VERSION = 'v1.6.6';
-        const DEFAULT_LATEST  = 'v1.6.6';
+        const DEFAULT_VERSION = 'v1.6.7';
+        const DEFAULT_LATEST  = 'v1.6.7';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -701,30 +716,30 @@
             console.log(`Smart analysis: ${tripData.length} trips, ${totalPositions} positions, drive time ${totalDurationHours.toFixed(1)}h, time span ${totalTimeSpanHours.toFixed(1)}h`);
 
             if (totalDurationHours >= 3) {
-                return { 
-                    speed: 3, 
+                return {
+                    speed: 5,
                     reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest fast browsing`,
-                    confidence: "high" 
+                    confidence: "high"
                 };
             } else if (totalDurationHours >= 1) {
-                return { 
-                    speed: 1, 
-                    reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest normal playback`,
-                    confidence: "high" 
+                return {
+                    speed: 3,
+                    reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest normal-fast playback`,
+                    confidence: "high"
                 };
             } else if (totalDurationHours > 0) {
                 const pointsPerMinute = totalPositions / (totalDurationHours * 60);
                 if (pointsPerMinute > 10) {
-                    return { 
-                        speed: 0.5, 
-                        reason: `Short precise track (${totalDurationHours.toFixed(1)}h), suggest slow observation`,
-                        confidence: "medium" 
+                    return {
+                        speed: 1,
+                        reason: `Short precise track (${totalDurationHours.toFixed(1)}h), suggest normal playback`,
+                        confidence: "medium"
                     };
                 } else {
-                    return { 
-                        speed: 1, 
+                    return {
+                        speed: 1,
                         reason: `Short trip (${totalDurationHours.toFixed(1)}h), suggest normal playback`,
-                        confidence: "medium" 
+                        confidence: "medium"
                     };
                 }
             }
@@ -763,11 +778,15 @@
         function showRecommendationToast(recommendation) {
             recommendationMessage.textContent = recommendation.reason;
             smartRecommendationToast.classList.add('show');
-            
-            setTimeout(() => {
+
+            // B-F3 — clear any prior auto-dismiss timer so a re-shown
+            // toast isn't hidden by a stale 5s callback from before.
+            if (recommendationTimer) clearTimeout(recommendationTimer);
+            recommendationTimer = setTimeout(() => {
                 if (smartRecommendationToast.classList.contains('show')) {
                     dismissRecommendation();
                 }
+                recommendationTimer = null;
             }, 5000);
         }
 
@@ -891,8 +910,9 @@
 
         // ─── App version badge ────────────────────────────────────────────
         // Renders the version pill in the header and the "Version" row in
-        // the info panel. Defaults to v1.6.6 (current). If /version reports a
-        // newer LatestVersion, we mark this build as outdated.
+        // the info panel. Defaults to the build-time constants above. If
+        // /version reports a newer LatestVersion, we mark this build as
+        // outdated.
         async function loadVersion() {
             const badge = document.getElementById('appVersion');
             const label = document.getElementById('versionLabel');
@@ -932,8 +952,13 @@
         function showToast(message, isError = false) {
             toast.textContent = message;
             toast.className = 'toast' + (isError ? ' error' : '') + ' show';
-            setTimeout(() => {
+            // B-F3 — clear any prior auto-dismiss timer. Without this,
+            // if the user re-fires Show Trail at t=2.9s, the OLD 3s
+            // timer still fires at t=3.0s and wipes the NEW toast.
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
                 toast.className = 'toast';
+                toastTimer = null;
             }, 3000);
         }
 
@@ -952,6 +977,12 @@
         }
 
         function moveCarMarkerAndPath(driveTracks, totalDuration) {
+            // B-F4 — bump the generation counter FIRST so any in-flight
+            // setTimeout from a prior run's leaflet.motion can detect
+            // it has been superseded and early-return.
+            animGeneration++;
+            const myGen = animGeneration;
+
             // B28 — kill any prior direction-tracking rAF loop BEFORE we
             // remove the layer.
             if (directionRafId) {
@@ -1130,6 +1161,13 @@
 
                 polylines.forEach((p, i) => {
                     p.on('motion-ended', () => {
+                        // B-F4 — drop stale callbacks from a prior run.
+                        // If animGeneration moved past our captured myGen,
+                        // a newer moveCarMarkerAndPath has already taken
+                        // over and rebuilt the layer group; touching its
+                        // state would call setLatLng on a removed marker
+                        // and motionStart() an orphan polyline.
+                        if (myGen !== animGeneration) return;
                         const nextIdx = i + 1;
                         if (nextIdx < polylines.length) {
                             // Jump car to the next drive's start point —
@@ -1299,7 +1337,11 @@
                 }
 
                 const latlngs = allPositions.map(pos => {
-                    if (typeof pos.latitude !== 'number' || typeof pos.longitude !== 'number') {
+                    // B-F1 — typeof NaN === 'number' is true, so we MUST use
+                    // Number.isFinite to reject NaN / ±Infinity. A NaN coord
+                    // silently breaks L.latLngBounds + carMarker.setLatLng
+                    // (renders the car off-map, fitBounds zooms to NaN).
+                    if (!Number.isFinite(pos.latitude) || !Number.isFinite(pos.longitude)) {
                         console.warn('Invalid position data:', pos);
                         return null;
                     }
@@ -1356,8 +1398,11 @@
                         return {
                             first: points.length > 0 ? new Date(points[0].date).getTime() : 0,
                             track: points
-                                .map(pos => (typeof pos.latitude === 'number' &&
-                                             typeof pos.longitude === 'number')
+                                // B-F1 — use Number.isFinite to reject NaN / Infinity
+                                // (typeof NaN === 'number' is true, so the old check let
+                                // bad coords through and broke the animation).
+                                .map(pos => (Number.isFinite(pos.latitude) &&
+                                             Number.isFinite(pos.longitude))
                                     ? [pos.latitude, pos.longitude]
                                     : null)
                                 .filter(p => p !== null)
@@ -1377,14 +1422,15 @@
 
                 // Animation duration MUST scale with content (B29 fix).
                 //
-                //   baseMs = clamp(totalSegments × 15ms, 3s, 90s)
-                //   • MS_PER_SEG = 15ms  → ~67 segs/sec at 1× (B33 — 2× the
-                //     previous 30ms; user reported v1.6.5 felt sluggish).
-                //   • MIN = 3s   — short trips don't blink past instantly
-                //   • MAX = 90s  — multi-hour windows top out at 90s @ 1×
-                const MS_PER_SEG = 15;
-                const MIN_DUR    = 3000;
-                const MAX_DUR    = 90000;
+                //   baseMs = clamp(totalSegments × 7.5ms, 1.5s, 45s)
+                //   • MS_PER_SEG = 7.5ms → ~133 segs/sec at 1× (2× the
+                //     previous 15ms; user reported v1.6.6 still felt sluggish
+                //     on multi-hour windows).
+                //   • MIN = 1.5s  — short trips don't blink past instantly
+                //   • MAX = 45s   — multi-hour windows top out at 45s @ 1×
+                const MS_PER_SEG = 7.5;
+                const MIN_DUR    = 1500;
+                const MAX_DUR    = 45000;
                 const baseMs     = Math.min(MAX_DUR, Math.max(MIN_DUR, totalSegs * MS_PER_SEG));
                 const finalDuration = Math.max(500, baseMs / finalSpeed);
 
@@ -1434,8 +1480,13 @@
 
         function isValidDateTime(dateTimeStr) {
             if (!dateTimeStr) return false;
-            const regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-            return regex.test(dateTimeStr);
+            // B-F2 — the old regex accepted impossible dates like
+            // '2024-99-99T99:99'. new Date(...) would return Invalid Date,
+            // then .toISOString() later throws RangeError. We now parse
+            // and reject anything whose getTime() is NaN.
+            if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateTimeStr)) return false;
+            const d = new Date(dateTimeStr);
+            return !isNaN(d.getTime());
         }
 
         async function checkHealth() {

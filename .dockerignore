@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore — keep the build context tight and prevent secrets / VCS
+# metadata from leaking into image layers.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# VCS / CI / dev tooling
+.git
+.gitignore
+.github
+.gitattributes
+.claude
+.workbuddy
+.idea
+.vscode
+.DS_Store
+*.swp
+*.swo
+
+# Local env (secrets — never bake into image)
+.env
+.env.local
+.env.*.local
+
+# Go build artifacts (built inside the build stage, not copied in)
+*.exe
+/app
+/dist/
+.gocache/
+.gopath/
+
+# Local docs / probes / scratch
+artifacts/
+tools/
+README.md
+README_EN.md
+CHANGELOG.md

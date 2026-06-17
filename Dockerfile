@@ -42,7 +42,10 @@ FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata && \
     addgroup -S app && adduser -S -G app app
-ENV TZ=Asia/Shanghai
+# TZ is intentionally NOT defaulted here — tzdata is installed above, so
+# the runtime can set it via `docker run -e TZ=...` or compose. Default
+# would otherwise depend on the image maintainer's region (Asia/Shanghai
+# is the wrong default for anyone outside China).
 
 WORKDIR /app
 COPY --from=build /out/app /app/app

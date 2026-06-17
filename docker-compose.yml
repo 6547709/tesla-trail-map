@@ -15,14 +15,14 @@
 
 services:
   tesla-trail-map:
-    image: ghcr.io/6547709/tesla-trail-map:1.6.6
+    image: ghcr.io/6547709/tesla-trail-map:1.6.7
     container_name: tesla-trail-map
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       # ───── Required (no defaults — startup aborts if any is missing) ─────
-      DATABASE_HOST: ${DATABASE_HOST:-192.168.66.200}   # your TeslaMate PG host
+      DATABASE_HOST: ${DATABASE_HOST:?DATABASE_HOST is required — set it in .env}  # your TeslaMate PG host
       DATABASE_PORT: ${DATABASE_PORT:-54320}            # TeslaMate's exposed port
       DATABASE_USER: ${DATABASE_USER:-teslamate}
       DATABASE_PASS: ${DATABASE_PASS:?DATABASE_PASS is required — set it in .env}

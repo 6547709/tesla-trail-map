@@ -5,6 +5,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.7] – 2026-06-17
+
+### 🇨🇳 中文
+
+#### 修改（Changed）
+- **🟡 B34-A — 动画速度再次加快一倍**：v1.6.6 默认速度仍偏慢，用户再次反馈。`MS_PER_SEG` 从 `15ms` 降到 `7.5ms`（约 133 段/秒 @ 1×）；`MIN/MAX` 上下限同步缩半为 `1.5s / 45s`。默认 24h ~5000 点窗口在 1× 下现在 **~37.5s** 走完（v1.6.6 是 75s，v1.6.5 是 150s）。
+- **🟢 B34-B — 速度档位改名为 1×/3×/5×**：旧的 `0.5× / 1× / 3×` 改为 `1× / 3× / 5×`。`0.5×` 档位删除——结合再次翻倍的速度，它实际已无意义。新 1× = 旧 0.5× 位置 + 2× 全局加速，对应“舒适慢放”场景；新 5× 是新增的最快档，适合“快速浏览整天行程”。
+- **🟡 B34-C — 智能推荐档位同步上移**：根据新按钮布局，阈值改为 `≥3h → 5×`、`1–3h → 3×`、短而密集 → `1×`（原 `0.5×`）。toast 默认文本同步改为 “Switch to 5x speed?”。
+
+#### 修复（Fixed）
+- **🔴 B-F1 — NaN 坐标突破 `typeof` 校验**：原 `typeof pos.latitude === 'number'` 接受 NaN（`typeof NaN === 'number'` 为 true）。如果后端某行 GPS 数据异常产 `NaN`，`L.latLngBounds` / `carMarker.setLatLng` 会拿到 NaN，小车静默飞出地图。**修复**：改用 `Number.isFinite()` 拒绝 NaN / ±Infinity。覆盖 `latlngs` 校验（`map.html:1301-1307`）和 `driveTracks` 校验（`map.html:1359-1363`）两处。
+- **🔴 B-F2 — `isValidDateTime` 正则放过非法日期**：原正则 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/` 接受 `2024-99-99T99:99`。`new Date(...)` 返回 Invalid Date，`NaN >= NaN` 校验放行，最后 `.toISOString()` 抛 `RangeError`，被 catch 吞掉后用户看到模糊的 "Failed to fetch data: RangeError"。**修复**：在正则通过后再 `new Date()` 一次，`!isNaN(d.getTime())` 才算合法。
+- **🔴 B-F3 — Toast 定时器竞争**：原 `setTimeout(..., 3000)` 无取消机制。若用户在 2.9s 再次触发 Show Trail，旧定时器 0.1s 后把新 toast 立即关掉。**修复**：引入模块级 `toastTimer` / `recommendationTimer`，新消息先 `clearTimeout` 旧定时器。
+- **🔴 B-F4 — `motion-ended` 监听器在新动画上意外触发**：leaflet.motion 内部 `setTimeout` 在 `map.removeLayer` 后仍可能再 fire 一次，旧闭包里的 `carMarker.setLatLng()` 和 `polylines[nextIdx].motionStart()` 会在孤儿 polyline 上跑，造成内存泄漏与状态错乱。**修复**：模块级 `animGeneration` 计数器，每次 `moveCarMarkerAndPath` 自增并 `const myGen = animGeneration`；旧回调 `myGen !== animGeneration` 直接 `return`，与 B28 rAF 修复同思路。
+
+#### 工程
+- `Version` / `LatestVersion` → `1.6.7`；UI / README / docker-compose 同步。
+- **🟢 部署清理（仅 ops / 构建端，镜像运行时行为不变）**：
+  - 新增 `.dockerignore`：build context 不再带 `.git/`、`*.md`、`.env*` 等冗余或敏感文件，runtime 镜像也不再残留 `.git/` 目录。
+  - CI 删掉 `Set up QEMU` 步骤：Dockerfile 走 `GOOS/GOARCH` 交叉编译，QEMU 一直是 dead weight，每跑省 10–20s。
+  - Dockerfile 删掉硬编码 `ENV TZ=Asia/Shanghai`：现在 `docker run -e TZ=...` / compose 的 TZ 能真正生效（不再被默认值盖住），`.env.example` 同步注释说明。
+  - `docker-compose.yml` 中 `DATABASE_HOST` 从 `:-192.168.66.200`（作者家庭 IP）改为 `:?` 强制必填：忘配时启动直接失败，不再静默连到错误地址。
+
+---
+
+### 🇬🇧 English
+
+#### Changed
+- **🟡 B34-A — Animation speed doubled (again)**: v1.6.6 still felt sluggish, per user report. `MS_PER_SEG` lowered from `15ms` to `7.5ms` (≈133 segs/sec at 1×); `MIN/MAX` floor/ceiling halved to `1.5s / 45s`. The default 24h ~5000-point window now plays in **~37.5s** at 1× (was 75s in v1.6.6, 150s in v1.6.5).
+- **🟢 B34-B — Speed presets relabelled to 1×/3×/5×**: old `0.5× / 1× / 3×` → `1× / 3× / 5×`. The `0.5×` preset is gone — combined with the new global 2× boost, it's no longer useful. New 1× is the "comfortable slow-mo" position; new 5× is a brand-new top gear for "skim a full day fast".
+- **🟡 B34-C — Smart-recommendation thresholds shifted up** to match the new buttons: `≥3h → 5×`, `1–3h → 3×`, short-precise → `1×` (was `0.5×`). Toast default text updated to "Switch to 5x speed?".
+
+#### Fixed
+- **🔴 B-F1 — NaN coordinates slipped past `typeof` check**: `typeof NaN === 'number'` is true, so the old `typeof pos.latitude === 'number'` guard accepted NaN. A single NaN row from a bad GPS sample would corrupt `L.latLngBounds` and `carMarker.setLatLng`, sending the car silently off-map. **Fix**: use `Number.isFinite()` to reject NaN / ±Infinity. Applied at both the `latlngs` map (`map.html:1301-1307`) and the `driveTracks` map (`map.html:1359-1363`).
+- **🔴 B-F2 — `isValidDateTime` regex accepted impossible dates**: the old `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/` matched `2024-99-99T99:99`. `new Date(...)` returned Invalid Date, the `NaN >= NaN` comparison let it through, and `.toISOString()` later threw `RangeError` which the catch silently swallowed. **Fix**: after the regex passes, parse with `new Date()` and require `!isNaN(d.getTime())`.
+- **🔴 B-F3 — Toast timer race**: the old `setTimeout(..., 3000)` had no cancel. If the user re-fired Show Trail at t=2.9s, the stale 3s timer fired at t=3.0s and wiped the brand-new toast. **Fix**: module-scoped `toastTimer` / `recommendationTimer`; new messages `clearTimeout` the old timer first.
+- **🔴 B-F4 — `motion-ended` listener firing on the new animation**: leaflet.motion's internal `setTimeout` could fire one more time after `map.removeLayer`, causing the stale closure to call `carMarker.setLatLng()` and `polylines[nextIdx].motionStart()` on orphaned objects — a memory leak and state corruption (same class of issue as B28). **Fix**: module-scoped `animGeneration` counter, captured per-call as `myGen`; stale callbacks early-return when `myGen !== animGeneration`.
+
+#### Engineering
+- `Version` / `LatestVersion` → `1.6.7`; UI / README / docker-compose synced.
+- **🟢 Deployment cleanup (ops / build only — no change to image runtime behaviour)**:
+  - Added `.dockerignore`: the build context no longer carries `.git/`, `*.md`, `.env*`, or other secret / bulk files, and the runtime image no longer embeds a `.git/` directory.
+  - Removed the `Set up QEMU` step from CI: the Dockerfile cross-compiles natively via `GOOS/GOARCH`, so QEMU was dead weight. Saves ~10–20 s per CI run.
+  - Removed the hardcoded `ENV TZ=Asia/Shanghai` from the Dockerfile: `docker run -e TZ=...` and compose's `TZ:` now take effect cleanly (no longer shadowed by the baked-in default). `.env.example` updated with a comment showing common zones.
+  - `docker-compose.yml` switched `DATABASE_HOST` from `:-192.168.66.200` (the maintainer's home IP) to `:?` (fail-fast required). Forgetting to set it now aborts startup instead of silently connecting to the wrong host.
+
+---
+
 ## [v1.6.6] – 2026-06-04
 
 ### 🇨🇳 中文
