@@ -5,6 +5,68 @@ Format follows [Keep a Changelog](https://keepachangelog.com/) and Semantic Vers
 
 ---
 
+## [v1.6.8] – 2026-06-18
+
+### 🇨🇳 中文
+
+#### 新增（Added）
+- **🟣 多车并行播放（headline feature）**：默认 `All cars` 下，`/trips` 现在按 `car_id` 分组，每辆车一个独立 marker + 独立 polyline 链 + 独立 rAF tick，全部**同时**跑。car 1 = 🚗 emoji（macOS 红色），car 2 = 蓝色 🚙 SVG，car ≥ 3 = 🚗 emoji + 彩色环（紫/绿/橙/粉/青/橙，modulo 循环）。每车**独立计时**（基于自己的轨迹长度），不再被全局拉伸。
+- **🟣 Trail 颜色按车匹配**：动画结束后，trail 颜色与该车的图标主色一致（car 1 红、car 2 蓝、car ≥ 3 环色），不再全红导致无法对号入座。
+- **🟣 Per-car 完成 toast**：一辆车先跑完时，1.5s 短 toast 提示“`{carName} finished`”，而不是 marker 静默钉死等全局结束。
+
+#### 修复（Fixed）
+- **🔴 B-FIX（多车重构）leaflet.motion `motionStart` 在 polyline 还没上地图时静默 no-op**：v1.7 重构时把 `polylines[0].motionStart()` 和首次 `requestAnimationFrame` 挪到了 `layerGroup.addTo(map)` **之前**，leaflet.motion 内部 `if (!this._map) return;` 守卫吃掉调用，polyline 不动；rAF tick 此时读 `getLatLngs()` 拿到的是原始完整轨迹，`pts[pts.length-1]` = 末点 → marker 卡死在第一段 drive 的终点不动。**修复**：把 `motionStart()` 和首次 rAF 延迟到 `layerGroup.addTo(map)` 之后，并收集 `perCarStarters[]` 在循环结束后批量 kick off。
+- **🔴 B-FIX（错误路径）fetch 失败时不清理旧动画**：`fetchAndDrawData` 的 catch 块只 toast + `setLoading(false)`，旧 `currentAnimation` / `currentPolyline` 仍指向之前成功画的图层组，下次 Show Trail 才被清。中间空档期旧 polylines + markers 残留地图上，像僵尸渲染。**修复**：抽 `teardownAnimation()` helper，catch 中先 teardown 再 toast。
+- **🟡 S1 — CSS `transition: transform 200ms ease` 是方向翻转隐患**：rAF 16ms 跑一帧，方向变化可短于 200ms → CSS transition 永远完不成 → 图标卡顿。**修复**：删 transition（翻转是离散视觉不是 tween）。
+- **🟡 S2 — `driveTracksByCar` 保留被过滤后为空的 bucket**：所有 drive 都是 singleton 被 `.filter(o => o.track.length >= 2)` 干掉的车的 bucket 仍存在，导致 `carCount` 偏高、toast 说 “across N cars” 但实际跑得少。**修复**：分组后清空数组。
+- **🟡 S3 — 1-drive 车的 marker 卡在起点**：单 drive 时 `motion-ended` 立即触发，`activePoly = null`，rAF tick bail，marker 从未移动。**修复**：motion-ended “this car finished” 分支显式把 marker 钉到最后一点。
+- **🟡 S4 — 首帧闪烁**：leaflet.motion 的首帧先于我们的 rAF 运行，第二次跑 tick 时 `getLatLngs()` 已推进几段 → marker 闪一下到中段再追上。**修复**：`isFirstTick` 短路，第一帧不读 head。
+- **🟡 S5 — 每帧 `getElement().querySelector` 浪费**：wrap div 是一次性的。**修复**：marker addTo 后一次性查 `wrap`，tick 内直接复用。
+- **🟡 S6 — per-car 日志缺失**：报 “car 3 太快” 时无法定位。**修复**：每车 carDuration 算完打 console。
+- **🟡 S7 — `main.go` bind 与 scan 类型不一致**：`args = append(args, int16(carID))` vs `var carID int`。**修复**：统一 `int`。
+- **🟡 S8 — `getSmartSpeed` 在多车模式有偏差**：原按 sum(所有 drive 时长) 推荐速度，2 辆 2h 车 sum=4h 推 5×，但 wall-clock = max=2h 应推 3×。**修复**：按 max(每车总时长) 算阈值。
+- **🟡 S9 — 每车完成时静默**：（已计入上面 “新增” 的 per-car toast）。
+
+#### 工程（NIT 清理）
+- **🟢 N1**：删 `.car-marker-container` 上的 `will-change: transform`（hint 推的是 inner container，Leaflet 不动它，无效）。
+- **🟢 N2**：删 `currentPolyline` 全局死代码（v1.6.5 起就没被赋值过）。
+- **🟢 N3**：重构 `CAR_COLOR_PALETTE`（带头部 3 个 dummy null）为 `RING_COLORS` 平铺数组，模运算更可读；car 1/2 主色独立为 `CAR_BRAND_COLORS` 常量。
+- **🟢 N5**：删未读的 `_driveCount` / `_carCount` 元数据。
+- `Version` / `LatestVersion` → `1.6.8`；UI / README / docker-compose 同步。
+- 后端 `getTripsWithPositions` SQL 增 `d.car_id` 到 CTE + SELECT；`IN (SELECT id FROM d)` 改 `JOIN d ON d.id = p.drive_id`（相同 hash-join plan，dbprobe 验证无回退）。**零 DB 写入**。
+
+---
+
+### 🇬🇧 English
+
+#### Added
+- **🟣 Multi-car parallel playback (headline)**: with default `All cars` selected, `/trips` is now grouped by `car_id` server-side via the new `car_id` field on each drive, and the frontend spawns one independent marker + polyline chain + rAF tick **per car**, all running concurrently. car 1 = 🚗 emoji (red on macOS), car 2 = blue 🚙 SVG, car ≥ 3 = 🚗 emoji on a coloured ring (purple/emerald/amber/pink/teal/orange, modulo-cycled). Each car times itself off its **own** track length — no global stretching.
+- **🟣 Trail colour matches car brand**: when animation ends, each trail is rendered in its car's brand colour (car 1 red, car 2 blue, car ≥ 3 ring colour) so line ↔ icon remain paired after markers stop moving. Previously all trails were Tesla red.
+- **🟣 Per-car finished toast**: when an early-finishing car (e.g. car 2's 5 short drives) stops while others keep animating, a 1.5s toast surfaces "`{carName} finished`" instead of leaving the marker silently frozen.
+
+#### Fixed
+- **🔴 B-FIX (multi-car) — leaflet.motion `motionStart` no-ops on detached polyline**: the v1.7 refactor moved `polylines[0].motionStart()` and the first `requestAnimationFrame` to BEFORE `layerGroup.addTo(map)`. leaflet.motion's internal `if (!this._map) return;` guard silently swallowed the call; the polyline never animated; the rAF tick then read `getLatLngs()` which returned the original full track, so `pts[pts.length-1]` = last point → marker was stuck at the end of the first drive. **Fix**: defer `motionStart()` and the first rAF until after `layerGroup.addTo(map)`; collect `perCarStarters[]` during the build loop and kick them off in a batch after addTo.
+- **🔴 B-FIX (error path) — failed fetch left stale animation on the map**: `fetchAndDrawData`'s catch only toasted + reset loading; the previous `currentAnimation` / `currentPolyline` stayed on the map underneath the error toast, looking like a stale render until the next Show Trail. **Fix**: extract `teardownAnimation()` helper, call it in catch before toasting.
+- **🟡 S1 — CSS `transition: transform 200ms ease` fought direction flips**: at 60fps (16ms/frame) the 200ms tween never completed when direction changed faster than that, producing visible stutter. **Fix**: removed the transition (a flip is a discrete visual change, not a tween).
+- **🟡 S2 — `driveTracksByCar` kept empty buckets**: cars whose drives were all filtered out as singletons still occupied a bucket, inflating `carCount` and making the "across N cars" toast over-count. **Fix**: prune empty buckets after grouping.
+- **🟡 S3 — 1-drive cars froze their marker at the start**: with only one polyline, `motion-ended` fired immediately, `activePoly` became null, rAF tick bailed — marker never moved. **Fix**: in motion-ended's "this car finished" branch, explicitly set marker to the last point of the last drive.
+- **🟡 S4 — first-tick flash**: leaflet.motion's internal frame ran before our rAF tick, so `getLatLngs()` already reported a head 1–2 segments in. Reading it teleported the marker start → mid-track → catch up. **Fix**: `isFirstTick` short-circuit — first frame skips the head read and stays at the marker's initial position.
+- **🟡 S5 — per-frame `getElement().querySelector` wasted work**: the `.car-marker-container` wrapper is created once with the divIcon. **Fix**: cache `wrap` once after addTo, reuse every frame.
+- **🟡 S6 — missing per-car timing log**: when a user reports "car N too fast / too slow", there was no car-level breakdown in the console. **Fix**: per-car `console.log` after `carDuration` is computed.
+- **🟡 S7 — `main.go` bind/scan type asymmetry**: `args = append(args, int16(carID))` vs `var carID int`. **Fix**: unify on `int`.
+- **🟡 S8 — `getSmartSpeed` over-recommended in multi-car mode**: sum-based thresholds treated 2× 2h cars as 4h (→ 5×) when wall-clock is `max = 2h` (→ 3×). **Fix**: thresholds use `max(per-car totalDurationHours)` when >1 car.
+- **🟡 S9 — per-car completion was silent** (counted under "Added" above).
+
+#### Engineering (NIT cleanups)
+- **🟢 N1**: removed `.car-marker-container`'s `will-change: transform` (hint was promoting a layer Leaflet doesn't actually transform-animate).
+- **🟢 N2**: deleted `currentPolyline` global (unassigned since v1.6.5 — dead code).
+- **🟢 N3**: refactored `CAR_COLOR_PALETTE` (3 dummy `null` head entries) into a flat `RING_COLORS` array; car 1/2 brand colours extracted to a separate `CAR_BRAND_COLORS` map. Modulo math is now readable.
+- **🟢 N5**: dropped unused `_driveCount` / `_carCount` metadata on the layerGroup.
+- `Version` / `LatestVersion` → `1.6.8`; UI / README / docker-compose synced.
+- Backend `getTripsWithPositions`: added `d.car_id` to the CTE and outer SELECT; rewrote `IN (SELECT id FROM d)` → `JOIN d ON d.id = p.drive_id` (same hash-join plan, dbprobe-confirmed no regression). **Zero DB writes.**
+
+---
+
 ## [v1.6.7] – 2026-06-17
 
 ### 🇨🇳 中文

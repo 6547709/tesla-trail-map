@@ -28,13 +28,13 @@ var (
 )
 
 // Version is the public release tag of this build. Bumped in lockstep with
-// CHANGELOG.md and the git tag (e.g. v1.6.7).
-const Version = "1.6.7"
+// CHANGELOG.md and the git tag (e.g. v1.6.8).
+const Version = "1.6.8"
 
 // LatestVersion is the latest released version this build is aware of.
 // Kept equal to Version on every release so /version can flag itself as
 // "up to date" without needing to call out to GitHub.
-const LatestVersion = "1.6.7"
+const LatestVersion = "1.6.8"
 
 type Position struct {
 	Latitude  float64 `json:"latitude"`
@@ -44,6 +44,7 @@ type Position struct {
 
 type DriveWithPositions struct {
 	DriveID   int        `json:"drive_id"`
+	CarID     int        `json:"car_id"`
 	Positions []Position `json:"positions"`
 }
 
@@ -322,17 +323,17 @@ func getTripsWithPositions(ctx context.Context, startDate, endDate string, carID
 		}
 		query = fmt.Sprintf(`
 WITH d AS MATERIALIZED (
-  SELECT id FROM drives
+  SELECT id, car_id FROM drives
   WHERE start_date >= $1 AND end_date <= $2 %s
 ), ranked AS (
-  SELECT p.drive_id, p.latitude, p.longitude, p.date,
+  SELECT p.drive_id, d.car_id, p.latitude, p.longitude, p.date,
          row_number() OVER (PARTITION BY p.drive_id ORDER BY p.date) AS rn,
          count(*)    OVER (PARTITION BY p.drive_id)                  AS total
   FROM positions p
+  JOIN d ON d.id = p.drive_id
   WHERE p.date >= $1 AND p.date <= $2
-    AND p.drive_id IN (SELECT id FROM d)
 )
-SELECT drive_id, latitude, longitude, date
+SELECT drive_id, car_id, latitude, longitude, date
 FROM ranked
 WHERE rn %% GREATEST(1, total / $3::bigint) = 0
    OR rn = 1
@@ -346,19 +347,24 @@ ORDER BY drive_id, date`, carCond)
 		}
 		query = fmt.Sprintf(`
 WITH d AS MATERIALIZED (
-  SELECT id FROM drives
+  SELECT id, car_id FROM drives
   WHERE start_date >= $1 AND end_date <= $2 %s
 )
-SELECT p.drive_id, p.latitude, p.longitude, p.date
+SELECT p.drive_id, d.car_id, p.latitude, p.longitude, p.date
 FROM positions p
+JOIN d ON d.id = p.drive_id
 WHERE p.date >= $1 AND p.date <= $2
-  AND p.drive_id IN (SELECT id FROM d)
 ORDER BY p.drive_id, p.date`, carCond)
 		args = []any{startDate, endDate}
 	}
 
 	if carID > 0 {
-		args = append(args, int16(carID))
+		// S7 — pass int (matches the scan target `var carID int` below).
+		// The underlying column is int2 in Postgres, but the value range
+		// fits comfortably in int on every supported platform. Keeping
+		// bind and scan on the same type avoids the asymmetry that
+		// triggered a reviewer nit.
+		args = append(args, carID)
 	}
 
 	rows, err := dbPool.Query(qctx, query, args...)
@@ -381,15 +387,15 @@ ORDER BY p.drive_id, p.date`, carCond)
 	posCount := 0
 
 	for rows.Next() {
-		var driveID int
+		var driveID, carID int
 		var lat, lng float64
 		var ts time.Time
-		if err := rows.Scan(&driveID, &lat, &lng, &ts); err != nil {
+		if err := rows.Scan(&driveID, &carID, &lat, &lng, &ts); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		d, ok := driveMap[driveID]
 		if !ok {
-			d = &DriveWithPositions{DriveID: driveID, Positions: make([]Position, 0, 256)}
+			d = &DriveWithPositions{DriveID: driveID, CarID: carID, Positions: make([]Position, 0, 256)}
 			driveMap[driveID] = d
 		}
 		d.Positions = append(d.Positions, Position{

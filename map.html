@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeslaMate Trail Map v1.6.7</title>
+    <title>TeslaMate Trail Map v1.6.8</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.motion/dist/leaflet.motion.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         /* ============================================================
-           Tesla Trail Map — UI v1.6.7 (refined)
+           Tesla Trail Map — UI v1.6.8 (refined)
            Design tokens & elevation system
            ============================================================ */
         :root {
@@ -434,9 +434,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 200ms ease;
+            /* S1 — no CSS transition on transform: the rAF tick flips
+               direction at up to 60fps, and a 200ms tween never finishes
+               before the next flip — produces visible jitter. The flip is
+               a discrete visual change, not a tween. */
+            /* N1 — removed will-change: transform. The hint was promoting
+               the inner container to its own GPU layer, but Leaflet
+               doesn't actually animate this container's transform —
+               it moves the outer marker element. The hint was effectively
+               dead weight. */
             transform-origin: center center;
-            will-change: transform;
         }
         /* Native emoji 🚗 faces LEFT — keep it that way when going west. */
         .car-marker-container.car-direction-west {
@@ -501,7 +508,7 @@
                     TeslaMate Trail Map
                     <span class="header-subtitle">Drive trail playback</span>
                 </h1>
-                <span id="appVersion" class="app-version" title="Current build: v1.6.7 (latest)">v1.6.7</span>
+                <span id="appVersion" class="app-version" title="Current build: v1.6.8 (latest)">v1.6.8</span>
             </div>
             <div class="controls">
                 <div class="control-group">
@@ -562,7 +569,7 @@
                 </div>
                 <div class="info-item">
                     <span class="info-label">Version</span>
-                    <span class="info-value" id="versionLabel">v1.6.7</span>
+                    <span class="info-value" id="versionLabel">v1.6.8</span>
                 </div>
             </div>
         </div>
@@ -584,11 +591,13 @@
         // Initialize map
         var map = L.map('map').setView([39.9042, 116.4074], 10);
 
-        // B28 — module-scoped rAF id so it survives across calls to
-        // moveCarMarkerAndPath. Without this, repeated 'Show Trail'
-        // clicks leak the previous direction-tracking loop, which
-        // would keep ticking forever (querying a dead marker).
-        let directionRafId = null;
+        // B28 — module-scoped rAF ids so they survive across calls to
+        // moveCarsAndPaths. Without this, repeated 'Show Trail'
+        // clicks leak the previous direction-tracking loop(s), which
+        // would keep ticking forever (querying dead markers).
+        // Multi-car (v1.7+): each running car spawns its own rAF tick,
+        // so we track them as an array and cancel ALL on the next run.
+        let directionRafIds = [];
 
         // B-F3 — module-scoped toast timer ids so a new toast cancels
         // the previous one's auto-dismiss. Without this, the stale
@@ -597,7 +606,7 @@
         let recommendationTimer = null;
 
         // B-F4 — animation generation counter. Every call to
-        // moveCarMarkerAndPath bumps it; motion-ended handlers check
+        // moveCarsAndPaths bumps it; motion-ended handlers check
         // that the current generation matches their captured value and
         // early-return otherwise. This prevents stale callbacks from
         // leaflet.motion's setTimeout firing on a polyline that's
@@ -612,7 +621,10 @@
         }).addTo(map);
 
         // Global variables
-        let currentPolyline = null;
+        // N2 — `currentPolyline` was a leftover from v1.6.2 single-polyline
+        // mode. v1.6.5 unified everything into the layerGroup (`currentAnimation`)
+        // and v1.7 keeps it that way. The variable was never assigned, so the
+        // `if (currentPolyline) map.removeLayer(...)` block was dead.
         let currentAnimation = null;
         let isLoading = false;
 
@@ -625,8 +637,8 @@
 
         // App version — defaults match the build constant in main.go.
         // /version may overwrite these at runtime if the server reports otherwise.
-        const DEFAULT_VERSION = 'v1.6.7';
-        const DEFAULT_LATEST  = 'v1.6.7';
+        const DEFAULT_VERSION = 'v1.6.8';
+        const DEFAULT_LATEST  = 'v1.6.8';
 
         // DOM elements
         const speedButtons = document.querySelectorAll('.speed-btn');
@@ -689,59 +701,60 @@
                 return { speed: 1, reason: "Default normal speed", confidence: "medium" };
             }
 
-            let totalDurationHours = 0;
             let totalPositions = 0;
+            const perCarDurationHours = Object.create(null);   // carId → hours
             let earliestTime = null;
             let latestTime = null;
 
             tripData.forEach(drive => {
                 if (drive.positions && drive.positions.length > 0) {
                     totalPositions += drive.positions.length;
-                    
+
                     const positions = drive.positions;
                     const startTime = new Date(positions[0].date);
                     const endTime = new Date(positions[positions.length - 1].date);
-                    
+
                     if (!earliestTime || startTime < earliestTime) earliestTime = startTime;
                     if (!latestTime || endTime > latestTime) latestTime = endTime;
-                    
-                    const durationMs = endTime - startTime;
-                    totalDurationHours += durationMs / (1000 * 60 * 60);
+
+                    const durHours = (endTime - startTime) / (1000 * 60 * 60);
+                    // car_id is filled in by getTripsWithPositions (v1.7+);
+                    // fall back to bucket -1 for older payloads.
+                    const carKey = drive.car_id != null ? drive.car_id : -1;
+                    perCarDurationHours[carKey] =
+                        (perCarDurationHours[carKey] || 0) + durHours;
                 }
             });
 
-            const totalTimeSpanHours = earliestTime && latestTime ? 
-                (latestTime - earliestTime) / (1000 * 60 * 60) : totalDurationHours;
+            // S8 — wall-clock time when cars run in parallel is the LONGEST
+            // car's drive time, not the sum across all cars. Sum-based
+            // thresholds over-recommend "fast browsing" in multi-car mode.
+            const carHours = Object.values(perCarDurationHours);
+            const carCount = carHours.length;
+            const effectiveHours = carCount > 1
+                ? Math.max(...carHours)
+                : (carHours[0] || 0);
 
-            console.log(`Smart analysis: ${tripData.length} trips, ${totalPositions} positions, drive time ${totalDurationHours.toFixed(1)}h, time span ${totalTimeSpanHours.toFixed(1)}h`);
+            console.log(`Smart analysis: ${tripData.length} trips across ${carCount} cars, ${totalPositions} positions, longest-car duration ${effectiveHours.toFixed(1)}h`);
 
-            if (totalDurationHours >= 3) {
+            if (effectiveHours >= 3) {
                 return {
                     speed: 5,
-                    reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest fast browsing`,
+                    reason: `Longest car ${effectiveHours.toFixed(1)} hours, suggest fast browsing`,
                     confidence: "high"
                 };
-            } else if (totalDurationHours >= 1) {
+            } else if (effectiveHours >= 1) {
                 return {
                     speed: 3,
-                    reason: `Drive time ${totalDurationHours.toFixed(1)} hours, suggest normal-fast playback`,
+                    reason: `Longest car ${effectiveHours.toFixed(1)} hours, suggest normal-fast playback`,
                     confidence: "high"
                 };
-            } else if (totalDurationHours > 0) {
-                const pointsPerMinute = totalPositions / (totalDurationHours * 60);
-                if (pointsPerMinute > 10) {
-                    return {
-                        speed: 1,
-                        reason: `Short precise track (${totalDurationHours.toFixed(1)}h), suggest normal playback`,
-                        confidence: "medium"
-                    };
-                } else {
-                    return {
-                        speed: 1,
-                        reason: `Short trip (${totalDurationHours.toFixed(1)}h), suggest normal playback`,
-                        confidence: "medium"
-                    };
-                }
+            } else if (effectiveHours > 0) {
+                return {
+                    speed: 1,
+                    reason: `Short trip (${effectiveHours.toFixed(1)}h), suggest normal playback`,
+                    confidence: "medium"
+                };
             }
 
             return { speed: 1, reason: "Default normal playback speed", confidence: "low" };
@@ -949,7 +962,11 @@
         }
         // ──────────────────────────────────────────────────────────────────
 
-        function showToast(message, isError = false) {
+        // showToast(message, isError=false, durationMs=3000)
+        // S9 — added optional durationMs so transient notifications
+        // (e.g. per-car "finished") can auto-dismiss faster than the
+        // default 3s, without conflicting with B-F3's timer reset.
+        function showToast(message, isError = false, durationMs = 3000) {
             toast.textContent = message;
             toast.className = 'toast' + (isError ? ' error' : '') + ' show';
             // B-F3 — clear any prior auto-dismiss timer. Without this,
@@ -959,7 +976,7 @@
             toastTimer = setTimeout(() => {
                 toast.className = 'toast';
                 toastTimer = null;
-            }, 3000);
+            }, durationMs);
         }
 
         function setLoading(loading) {
@@ -976,47 +993,86 @@
             }
         }
 
-        function moveCarMarkerAndPath(driveTracks, totalDuration) {
+        // B-FIX — extract cleanup into a helper so the error path in
+        // fetchAndDrawData can call it too. Previously, when a fetch
+        // failed (e.g. server 500, invalid JSON, timeout), the catch
+        // block only toasted and reset loading — the OLD `currentAnimation`
+        // layer group remained on the map underneath the error toast,
+        // making it look like a stale render until the next Show Trail.
+        function teardownAnimation() {
+            directionRafIds.forEach(id => cancelAnimationFrame(id));
+            directionRafIds = [];
+            if (currentAnimation) {
+                map.removeLayer(currentAnimation);
+                currentAnimation = null;
+            }
+        }
+
+        function moveCarsAndPaths(driveTracksByCar, finalSpeed) {
             // B-F4 — bump the generation counter FIRST so any in-flight
             // setTimeout from a prior run's leaflet.motion can detect
             // it has been superseded and early-return.
             animGeneration++;
             const myGen = animGeneration;
 
-            // B28 — kill any prior direction-tracking rAF loop BEFORE we
-            // remove the layer.
-            if (directionRafId) {
-                cancelAnimationFrame(directionRafId);
-                directionRafId = null;
-            }
-            if (currentAnimation) {
-                map.removeLayer(currentAnimation);
-            }
-            if (currentPolyline) {
-                map.removeLayer(currentPolyline);
-            }
+            // B28 — kill any prior direction-tracking rAF loop(s) BEFORE
+            // we remove the layer. Multi-car spawns one rAF per car, so
+            // we cancel them all by sweeping the array.
+            teardownAnimation();
 
-            if (!driveTracks || driveTracks.length === 0) {
+            // driveTracksByCar: { [carId]: [[lat,lng], ...] }
+            const carIds = Object.keys(driveTracksByCar)
+                .map(Number)
+                .sort((a, b) => a - b);
+            if (carIds.length === 0) {
                 showToast('No trail data found', true);
                 return;
             }
 
             try {
-                // E9 — Per-vehicle marker (v3: side-view only, by car_id).
+                // E9 — Per-vehicle marker (v4: side-view + colour per car).
                 //
-                // Behaviour:
-                //   • car_id=1 → system emoji 🚗 (Apple/Segoe/Noto picks
-                //     the right glyph per platform).
-                //   • car_id=2 → inline Twemoji-styled blue SUV (🚙) so
-                //     the colour is consistent across platforms instead
-                //     of macOS's orange / Windows' black SUV glyph.
-                //   • Anything else (0 = "all cars", or future cars) →
-                //     falls back to the 🚗 emoji.
+                // Behaviour by car_id:
+                //   • car_id=1 → system 🚗 emoji (red on macOS).
+                //   • car_id=2 → inline Twemoji-styled blue 🚙 SVG (no
+                //     platform colour drift between macOS orange and
+                //     Windows black).
+                //   • car_id≥3 → 🚗 emoji with a coloured ring background;
+                //     the ring colour is taken from RING_COLORS so each
+                //     additional car is visually distinct.
                 //
-                // Both glyphs default to facing LEFT (west). The rAF
-                // direction loop below toggles `.car-direction-east`
+                // Both glyphs default to facing LEFT (west). The per-car
+                // rAF direction loop toggles `.car-direction-east`
                 // (CSS `scaleX(-1)`) when the marker's longitude is
                 // increasing — pure horizontal flip, never tilted up/down.
+                //
+                // S10 — same colour is reused as the polyline trail stroke
+                // so the trail ↔ icon match after the animation ends.
+                //
+                // N3 — flat lookup; the previous CAR_COLOR_PALETTE kept 3
+                // dummy `null` entries at indices 0–2 purely to align the
+                // arithmetic, which made the modulo math hard to read.
+                const CAR_BRAND_COLORS = {
+                    1: '#ef4444',   // red   — matches macOS 🚗 emoji hue
+                    2: '#3b82f6',   // blue  — matches the blue SUV SVG
+                };
+                const RING_COLORS = [
+                    '#a855f7',     // purple  (car_id=3)
+                    '#10b981',     // emerald (car_id=4)
+                    '#f59e0b',     // amber   (car_id=5)
+                    '#ec4899',     // pink    (car_id=6)
+                    '#14b8a6',     // teal    (car_id=7)
+                    '#f97316',     // orange  (car_id=8)
+                ];
+                function carBrandColor(carId) {
+                    if (CAR_BRAND_COLORS[carId]) return CAR_BRAND_COLORS[carId];
+                    // car_id ≥ 3 cycles through the ring palette (modulo
+                    // for unbounded car_ids).
+                    const len = RING_COLORS.length;
+                    let idx = (carId - 3) % len;
+                    if (idx < 0) idx += len;
+                    return RING_COLORS[idx];
+                }
                 function buildCarSvg(carId) {
                     if (carId === 2) {
                         // Twemoji-flavoured blue SUV (1F699 stylised).
@@ -1065,179 +1121,288 @@
                             </svg>
                         `;
                     }
-                    // Default: system 🚗 emoji.
+                    // car_id = 1 — bare system 🚗 emoji (red on macOS).
+                    if (carId === 1) {
+                        return `
+                            <svg class="tesla-car-icon" width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+                                <ellipse cx="22" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.25)"/>
+                                <text x="22" y="30" text-anchor="middle"
+                                      font-size="32"
+                                      style="font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji', sans-serif;">🚗</text>
+                            </svg>
+                        `;
+                    }
+                    // car_id ≥ 3 — same 🚗 emoji on a coloured ring so each
+                    // additional car is visually distinct on the map.
+                    const color = carBrandColor(carId);
                     return `
                         <svg class="tesla-car-icon" width="44" height="44" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
                             <ellipse cx="22" cy="40" rx="14" ry="2.4" fill="rgba(0,0,0,0.25)"/>
-                            <text x="22" y="30" text-anchor="middle"
-                                  font-size="32"
+                            <circle cx="22" cy="22" r="19" fill="${color}" opacity="0.88"
+                                    stroke="#ffffff" stroke-width="2"/>
+                            <text x="22" y="29" text-anchor="middle"
+                                  font-size="22"
                                   style="font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji', sans-serif;">🚗</text>
                         </svg>
                     `;
                 }
-                const carSvg = buildCarSvg(currentCarId);
-
-                // Icon size differs slightly per glyph so the SUV doesn't
-                // feel cramped — keep anchors centred.
-                const iconW = currentCarId === 2 ? 48 : 44;
-                const iconH = 44;
-                const carIcon = L.divIcon({
-                    html: `<div class="car-marker-container car-direction-west">${carSvg}</div>`,
-                    iconSize: [iconW, iconH],
-                    iconAnchor: [iconW / 2, iconH / 2],
-                    className: 'car-marker'
-                });
 
                 // ─────────────────────────────────────────────────────────
-                // B30/B32 — Per-drive polylines + manual chain.
+                // B30/B32 — Per-drive polylines + manual chain, now per-car.
                 //
-                // History of this code path:
+                // History:
                 //   v1.6.2: single flattened polyline → fake straight lines
                 //           between drives, car appeared to teleport (B30).
                 //   v1.6.3: switched to L.motion.seq with per-polyline
-                //           markers. Problem: when the seq adds its
-                //           children to the map, EVERY child polyline's
-                //           __marker is rendered immediately at its
-                //           starting point — leaving N static cars on
-                //           the map and no animation (B32).
-                //   v1.6.5 (this): drop motion.seq's marker management.
+                //           markers. The seq adds EVERY child polyline's
+                //           __marker to the map at its starting point,
+                //           leaving N static cars and no animation (B32).
+                //   v1.6.5: drop motion.seq's marker management; one car.
+                //   v1.7 (this): one car → N cars, but each car still uses
+                //           the same "one marker per car, manual chain
+                //           between drives, B33 no-4th-arg trick" recipe
+                //           to avoid both B30 and B32 at the per-car
+                //           level. All cars run in parallel; the global
+                //           "Done" status fires only when the LAST car
+                //           finishes its chain.
                 //
-                // Strategy:
-                //   • Each drive becomes its own L.motion.polyline with
-                //     showMarker:false — no auto-marker spam.
-                //   • We add ONE plain L.marker that we drive ourselves
-                //     by reading the active polyline's animated head
-                //     every frame.
-                //   • Polylines are chained: when polyline N fires
-                //     'motionended', we jump our marker to drive N+1's
-                //     start point and motionStart() polyline N+1.
-                //
-                // Net effect: exactly one car visible at any time, it
-                // jumps cleanly between drives (no fake connector line),
-                // and the trail fills in behind it.
+                // Net effect: multiple distinct cars visible at once, each
+                // jumps cleanly between its OWN drives (no fake connector
+                // line), and the trail fills in behind each.
                 // ─────────────────────────────────────────────────────────
-                const totalSegs = driveTracks.reduce(
-                    (s, t) => s + (t.length - 1), 0);
+                const MS_PER_SEG = 7.5;
+                const MIN_DUR    = 1500;
+                const MAX_DUR    = 45000;
 
-                const polylines = driveTracks.map((track, i) => {
-                    const segs = Math.max(1, track.length - 1);
-                    const dur  = Math.max(200, Math.round(totalDuration * (segs / totalSegs)));
-                    // B33 — DELIBERATELY do NOT pass a 4th `markerOptions`
-                    // arg to L.motion.polyline. If we pass anything (even
-                    // `{showMarker:false}`), motion creates an internal
-                    // __marker with the default blue Leaflet pin icon and
-                    // its `_drawMarker()` logic adds that marker to the
-                    // map on the first animation frame (the user reported
-                    // "blue location pins following the car"). Omitting
-                    // the 4th arg keeps `this.markerOptions` undefined,
-                    // so __marker is never created — only our own car
-                    // L.marker is visible.
-                    return L.motion.polyline(track, {
-                        color: "#E81E25",
-                        weight: 5,
-                        opacity: 0.6
-                    }, {
-                        auto: false,                // we control start
-                        duration: dur
+                const allLayers = [];
+                const perCarRafIds = Object.create(null);   // carId → rAF id
+                const perCarStarters = [];                  // {carId, firstPoly, tick} → kicked off AFTER addTo(map)
+                let pendingCars = 0;                        // cars still animating
+                const carDurations = Object.create(null);   // carId → ms
+
+                carIds.forEach((carId) => {
+                    const driveTracks = driveTracksByCar[carId];
+                    if (!driveTracks || driveTracks.length === 0) return;
+
+                    // Per-car SVG + icon (SUV is wider, others 44×44).
+                    const carSvg = buildCarSvg(carId);
+                    const iconW = carId === 2 ? 48 : 44;
+                    const iconH = 44;
+                    const carIcon = L.divIcon({
+                        html: `<div class="car-marker-container car-direction-west">${carSvg}</div>`,
+                        iconSize: [iconW, iconH],
+                        iconAnchor: [iconW / 2, iconH / 2],
+                        className: 'car-marker'
                     });
-                });
 
-                // Our own marker — we move it manually. Initial pos = drive 0's start.
-                const carMarker = L.marker(driveTracks[0][0], {
-                    icon: carIcon,
-                    interactive: false,
-                    keyboard: false,
-                    zIndexOffset: 1000
-                });
+                    // Per-car duration — same MS_PER_SEG / clamp as v1.6.6,
+                    // but each car sizes to its OWN track length (not the
+                    // global total) so a short-trip car finishes before a
+                    // long-trip one instead of being stretched to match it.
+                    const carTotalSegs = driveTracks.reduce(
+                        (s, t) => s + (t.length - 1), 0);
+                    if (carTotalSegs < 1) return;
+                    const carBaseMs = Math.min(
+                        MAX_DUR,
+                        Math.max(MIN_DUR, carTotalSegs * MS_PER_SEG));
+                    const carDuration = Math.max(500, carBaseMs / finalSpeed);
+                    carDurations[carId] = carDuration;
 
-                // A layerGroup so cleanup is one map.removeLayer().
-                currentAnimation = L.layerGroup([...polylines, carMarker]).addTo(map);
-                // Tag the group so cleanup logic on next run can identify it.
-                currentAnimation._driveCount = polylines.length;
+                    // Per-car polylines — same B33 trick (NO 4th arg).
+                    // S10 — trail colour matches the car brand colour so the
+                    // line ↔ icon remain paired after the animation ends.
+                    // Previously all trails were hardcoded to Tesla red,
+                    // which made it impossible to tell which trail belonged
+                    // to which car once the markers stopped moving.
+                    const trailColor = carBrandColor(carId);
 
-                // ─── Manual chain: polyline N+1 starts when N ends ───
-                let activeIdx = 0;
-                let activePoly = polylines[0];
+                    const polylines = driveTracks.map((track) => {
+                        const segs = Math.max(1, track.length - 1);
+                        const dur  = Math.max(200, Math.round(
+                            carDuration * (segs / carTotalSegs)));
+                        return L.motion.polyline(track, {
+                            color: trailColor,
+                            weight: 5,
+                            opacity: 0.6
+                        }, {
+                            auto: false,                // we control start
+                            duration: dur
+                        });
+                    });
 
-                polylines.forEach((p, i) => {
-                    p.on('motion-ended', () => {
-                        // B-F4 — drop stale callbacks from a prior run.
-                        // If animGeneration moved past our captured myGen,
-                        // a newer moveCarMarkerAndPath has already taken
-                        // over and rebuilt the layer group; touching its
-                        // state would call setLatLng on a removed marker
-                        // and motionStart() an orphan polyline.
-                        if (myGen !== animGeneration) return;
-                        const nextIdx = i + 1;
-                        if (nextIdx < polylines.length) {
-                            // Jump car to the next drive's start point —
-                            // this is the "no fake connector line" step:
-                            // we move the marker via setLatLng, NOT by
-                            // drawing a polyline between segments.
-                            const nextStart = driveTracks[nextIdx][0];
-                            carMarker.setLatLng(nextStart);
-                            activeIdx = nextIdx;
-                            activePoly = polylines[nextIdx];
-                            polylines[nextIdx].motionStart();
-                        } else {
-                            // Finale.
-                            activePoly = null;
-                            if (directionRafId) {
-                                cancelAnimationFrame(directionRafId);
-                                directionRafId = null;
+                    // Per-car marker — we move it manually each frame.
+                    const carMarker = L.marker(driveTracks[0][0], {
+                        icon: carIcon,
+                        interactive: false,
+                        keyboard: false,
+                        zIndexOffset: 1000 + carId   // stable layering
+                    });
+
+                    allLayers.push(...polylines, carMarker);
+                    pendingCars++;
+
+                    // S6 — per-car timing log. When a user reports "car N
+                    // felt too fast / too slow" this gives us the exact
+                    // carId, drive count, segment count, and computed
+                    // duration without needing to re-derive from the API.
+                    console.log('Car plan:',
+                        'carId=', carId,
+                        'drives=', driveTracks.length,
+                        'totalSegs=', carTotalSegs,
+                        'duration=', carDuration + 'ms');
+
+                    // Per-car chain: polyline N+1 starts when N ends.
+                    let activePoly = polylines[0];
+                    polylines.forEach((p, i) => {
+                        p.on('motion-ended', () => {
+                            // B-F4 — drop stale callbacks from a prior run.
+                            if (myGen !== animGeneration) return;
+                            const nextIdx = i + 1;
+                            if (nextIdx < polylines.length) {
+                                // Jump car to next drive's start — same
+                                // "no fake connector line" rule as v1.6.5.
+                                carMarker.setLatLng(driveTracks[nextIdx][0]);
+                                activePoly = polylines[nextIdx];
+                                polylines[nextIdx].motionStart();
+                            } else {
+                                // This car finished; cancel its rAF tick.
+                                activePoly = null;
+                                // S3 — pin the marker to the LAST point of
+                                // the LAST drive. Multi-drive cars usually
+                                // already arrive here because the previous
+                                // rAF tick read head=last, but 1-drive cars
+                                // (or any case where motion-ended races the
+                                // last tick) would otherwise freeze the
+                                // marker at the START (because the chain
+                                // never iterated past polyline 0 and the
+                                // rAF tick never had a "next" drive to
+                                // advance to).
+                                const lastTrack = driveTracks[driveTracks.length - 1];
+                                if (lastTrack && lastTrack.length > 0) {
+                                    carMarker.setLatLng(lastTrack[lastTrack.length - 1]);
+                                }
+                                if (perCarRafIds[carId]) {
+                                    cancelAnimationFrame(perCarRafIds[carId]);
+                                    perCarRafIds[carId] = null;
+                                }
+                                pendingCars--;
+                                // S9 — let the user know this specific car
+                                // finished; otherwise an early-finishing
+                                // car (e.g. car 2's 5 short drives) looks
+                                // frozen at its endpoint while car 1 keeps
+                                // animating. Use a short 1.5s toast so we
+                                // don't drown out the global "completed".
+                                if (pendingCars > 0) {
+                                    const carMeta = availableCars.find(c => c.id === carId);
+                                    const carLabel = carMeta ? carMeta.name : `Car #${carId}`;
+                                    showToast(`${carLabel} finished`, false, 1500);
+                                }
+                                if (pendingCars <= 0) {
+                                    showToast('Trail animation completed');
+                                    setStatus('connected', 'Done');
+                                }
                             }
-                            showToast('Trail animation completed');
-                            setStatus('connected', 'Done');
-                        }
+                        });
                     });
-                });
 
-                // Kick off the first drive.
-                polylines[0].motionStart();
+                    // B-FIX: motionStart() and the first rAF tick MUST
+                    // wait until the polyline is on the map. leaflet.motion's
+                    // motionStart() guards on `this._map` and silently no-ops
+                    // when called on a detached polyline — leading to a static
+                    // marker at the end of the first drive (the rAF tick then
+                    // reads getLatLngs() which always returns the full original
+                    // track, so head = last point). Defer both to AFTER the
+                    // layerGroup.addTo(map) below.
+                    //
+                    // S5 — also defer the `carMarker.getElement().querySelector`
+                    // lookup to here (after addTo). At marker-creation time
+                    // the marker isn't on the map yet, so getElement() returns
+                    // null. Cache once into `wrap` and reuse every frame.
+                    perCarStarters.push({
+                        carId:     carId,
+                        firstPoly: polylines[0],
+                        tickFn:    () => {
+                            // tickFn is invoked AFTER layerGroup.addTo(map),
+                            // so the marker is on the map and getElement()
+                            // is safe.
+                            const el = carMarker.getElement && carMarker.getElement();
+                            const wrap = el ? el.querySelector('.car-marker-container') : null;
 
-                // ─── rAF loop: sync marker to active polyline's head + flip direction
-                //
-                // leaflet.motion appends animated points to its polyline
-                // via setLatLngs(). We read the LAST appended point each
-                // frame — that's the current "head" of the moving line —
-                // and snap our marker to it. Same loop also computes the
-                // longitude delta to flip the car icon left/right.
-                let lastLng = null;
-                let currentDir = 'west';
-                const epsilon = 1e-6;
-
-                const tick = () => {
-                    if (!activePoly) return;  // animation ended
-                    const pts = activePoly.getLatLngs();
-                    if (pts && pts.length > 0) {
-                        const head = pts[pts.length - 1];
-                        carMarker.setLatLng(head);
-
-                        if (lastLng !== null) {
-                            const delta = head.lng - lastLng;
-                            let nextDir = currentDir;
-                            if      (delta >  epsilon) nextDir = 'east';
-                            else if (delta < -epsilon) nextDir = 'west';
-                            if (nextDir !== currentDir) {
-                                const el = carMarker.getElement && carMarker.getElement();
-                                if (el) {
-                                    const wrap = el.querySelector('.car-marker-container');
-                                    if (wrap) {
-                                        wrap.classList.remove(
-                                            'car-direction-east',
-                                            'car-direction-west'
-                                        );
-                                        wrap.classList.add('car-direction-' + nextDir);
+                            // Per-car rAF tick: snap marker to active polyline
+                            // head + flip car icon when longitude crosses the
+                            // epsilon. Defined inside the starter so it closes
+                            // over the right per-car `activePoly` and `carMarker`.
+                            let lastLng = null;
+                            let currentDir = 'west';
+                            let isFirstTick = true;
+                            const epsilon = 1e-6;
+                            const tick = () => {
+                                if (!activePoly) return;  // this car ended
+                                if (isFirstTick) {
+                                    // S4 — skip the head read on the very
+                                    // first frame. By the time our rAF fires,
+                                    // leaflet.motion's own internal frame has
+                                    // already run (it scheduled before us in
+                                    // motionStart → tickFn order), so
+                                    // getLatLngs() would already report a head
+                                    // 1–2 segments in. Reading it would
+                                    // visibly teleport the marker from start
+                                    // → mid-track → catch up. Skipping keeps
+                                    // the marker at the start (its initial
+                                    // position) and the second tick reads
+                                    // head normally for a smooth ramp-in.
+                                    isFirstTick = false;
+                                } else {
+                                    const pts = activePoly.getLatLngs();
+                                    if (pts && pts.length > 0) {
+                                        const head = pts[pts.length - 1];
+                                        carMarker.setLatLng(head);
+                                        if (lastLng !== null) {
+                                            const delta = head.lng - lastLng;
+                                            let nextDir = currentDir;
+                                            if      (delta >  epsilon) nextDir = 'east';
+                                            else if (delta < -epsilon) nextDir = 'west';
+                                            if (nextDir !== currentDir && wrap) {
+                                                wrap.classList.remove(
+                                                    'car-direction-east',
+                                                    'car-direction-west');
+                                                wrap.classList.add('car-direction-' + nextDir);
+                                                currentDir = nextDir;
+                                            }
+                                        }
+                                        lastLng = head.lng;
                                     }
                                 }
-                                currentDir = nextDir;
-                            }
+                                perCarRafIds[carId] = requestAnimationFrame(tick);
+                            };
+                            perCarRafIds[carId] = requestAnimationFrame(tick);
                         }
-                        lastLng = head.lng;
-                    }
-                    directionRafId = requestAnimationFrame(tick);
-                };
-                directionRafId = requestAnimationFrame(tick);
+                    });
+                });
+
+                if (pendingCars === 0) {
+                    showToast('No drivable segments after filtering', true);
+                    return;
+                }
+
+                // Single layerGroup → one-shot cleanup on next Show Trail.
+                // N5 — dropped _driveCount / _carCount metadata. They were
+                // written here but never read; per-car timing now lives in
+                // console.log + the returned carDurations.
+                currentAnimation = L.layerGroup(allLayers).addTo(map);
+
+                // NOW kick off all per-car animations — polylines are on the
+                // map, so motionStart() actually starts animating and the rAF
+                // ticks read moving getLatLngs() instead of static originals.
+                perCarStarters.forEach(({ carId, firstPoly, tickFn }) => {
+                    firstPoly.motionStart();
+                    tickFn();
+                });
+
+                // Track every per-car rAF id so the next call cancels them.
+                directionRafIds = Object.values(perCarRafIds).filter(Boolean);
+
+                return carDurations;
 
             } catch (error) {
                 console.error('Animation failed:', error);
@@ -1390,12 +1555,18 @@
                 // not always real-world chronology if trips were ingested
                 // late).
                 // ─────────────────────────────────────────────────────────
-                const driveTracks = data
+                // v1.7 — Group drives by car_id (the server now returns
+                // car_id per drive). Within each car we still sort drives
+                // chronologically by the first point's timestamp; each
+                // car's chain runs in parallel with the other cars.
+                const driveTracksByCar = Object.create(null);
+                data
                     .map(drive => {
                         const points = (drive.positions || [])
                             .slice()
                             .sort((a, b) => new Date(a.date) - new Date(b.date));
                         return {
+                            carId: drive.car_id,        // backend now returns this
                             first: points.length > 0 ? new Date(points[0].date).getTime() : 0,
                             track: points
                                 // B-F1 — use Number.isFinite to reject NaN / Infinity
@@ -1409,41 +1580,52 @@
                         };
                     })
                     .filter(o => o.track.length >= 2)         // drop singletons
-                    .sort((a, b) => a.first - b.first)        // chronological
-                    .map(o => o.track);
+                    .sort((a, b) => a.first - b.first)        // chronological (across all cars)
+                    .forEach(o => {
+                        if (!driveTracksByCar[o.carId]) driveTracksByCar[o.carId] = [];
+                        driveTracksByCar[o.carId].push(o.track);
+                    });
 
-                if (driveTracks.length === 0) {
+                // S2 — drop empty buckets so the "across N cars" toast and
+                // carCount reflect only cars that actually animate. Some
+                // cars' drives may all have been singletons and filtered out
+                // by the `.filter(o => o.track.length >= 2)` above.
+                for (const k of Object.keys(driveTracksByCar)) {
+                    if (driveTracksByCar[k].length === 0) {
+                        delete driveTracksByCar[k];
+                    }
+                }
+
+                const carCount   = Object.keys(driveTracksByCar).length;
+                const driveCount = Object.values(driveTracksByCar)
+                    .reduce((s, tracks) => s + tracks.length, 0);
+                const totalSegs  = Object.values(driveTracksByCar)
+                    .reduce((s, tracks) =>
+                        s + tracks.reduce((ss, t) => ss + t.length - 1, 0), 0);
+
+                if (driveCount === 0) {
                     showToast('No drivable segments after filtering', true);
                     setLoading(false);
                     return;
                 }
-                const totalSegs = driveTracks.reduce(
-                    (s, t) => s + (t.length - 1), 0);
 
-                // Animation duration MUST scale with content (B29 fix).
-                //
-                //   baseMs = clamp(totalSegments × 7.5ms, 1.5s, 45s)
-                //   • MS_PER_SEG = 7.5ms → ~133 segs/sec at 1× (2× the
-                //     previous 15ms; user reported v1.6.6 still felt sluggish
-                //     on multi-hour windows).
-                //   • MIN = 1.5s  — short trips don't blink past instantly
-                //   • MAX = 45s   — multi-hour windows top out at 45s @ 1×
-                const MS_PER_SEG = 7.5;
-                const MIN_DUR    = 1500;
-                const MAX_DUR    = 45000;
-                const baseMs     = Math.min(MAX_DUR, Math.max(MIN_DUR, totalSegs * MS_PER_SEG));
-                const finalDuration = Math.max(500, baseMs / finalSpeed);
-
+                // Animation duration is now computed PER CAR inside
+                // moveCarsAndPaths (each car sizes to its own track length),
+                // so we no longer pre-compute a global finalDuration here.
+                // We just log the aggregate plan and pass finalSpeed through.
                 console.log('Animation plan:',
-                    'drives=', driveTracks.length,
+                    'cars=', carCount,
+                    'drives=', driveCount,
                     'totalSegments=', totalSegs,
-                    'baseMs=', baseMs,
-                    'speed=', finalSpeed + 'x',
-                    'finalDuration=', finalDuration + 'ms');
+                    'speed=', finalSpeed + 'x');
 
-                moveCarMarkerAndPath(driveTracks, finalDuration);
-                const secs = (finalDuration / 1000).toFixed(1);
-                showToast(`Playing ${data.length} trips · ${allPositions.length} points · ${secs}s @ ${finalSpeed}×`);
+                const carDurations = moveCarsAndPaths(driveTracksByCar, finalSpeed) || {};
+                const longestMs = Object.values(carDurations).length
+                    ? Math.max(...Object.values(carDurations))
+                    : 0;
+                const secs = (longestMs / 1000).toFixed(1);
+                const carLabel = carCount > 1 ? ` across ${carCount} cars` : '';
+                showToast(`Playing ${driveCount} trips${carLabel} · ${allPositions.length} points · ${secs}s @ ${finalSpeed}×`);
 
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -1451,6 +1633,9 @@
                     return; // don't toast — this is intentional cancellation
                 }
                 console.log("Failed to fetch data:", error);
+                // B-FIX — tear down any in-flight animation so the user
+                // doesn't see stale polylines + markers under the error toast.
+                teardownAnimation();
                 showToast(error.message || 'Failed to fetch data', true);
             } finally {
                 setLoading(false);
